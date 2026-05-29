@@ -1,11 +1,9 @@
-#pragma once 
+#pragma once
 
-//‘§±‡“Î∫Í
 #ifdef DEBUG
-#define GL_CALL(func)  func;checkError();
+#define GL_CALL(func) func; checkError(__FILE__, __LINE__);
 #else
-#define GL_CALL(func)  func;
-#endif 
+#define GL_CALL(func) func;
+#endif
 
-
-void checkError();
+void checkError(const char* file = nullptr, int line = 0);

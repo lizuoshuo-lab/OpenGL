@@ -380,12 +380,28 @@ void Renderer::renderObject(
 			pbrMat->mAo->bind();
 
 			shader->setInt("irradianceMap", 5);
-			pbrMat->mIrradianceIndirect->setUnit(5);
-			pbrMat->mIrradianceIndirect->bind();
+			pbrMat->mIrradianceMap->setUnit(5);
+			pbrMat->mIrradianceMap->bind();
 
-			for (int i = 0; i < pointLights.size(); i++) {
-				shader->setVector3("pointLights[" + std::to_string(i) + "].color", pointLights[i]->mColor);
-				shader->setVector3("pointLights[" + std::to_string(i) + "].position", pointLights[i]->getPosition());
+			shader->setInt("prefilterMap", 6);
+			pbrMat->mPrefilterMap->setUnit(6);
+			pbrMat->mPrefilterMap->bind();
+
+			shader->setInt("brdfLUT", 7);
+			pbrMat->mBrdfLut->setUnit(7);
+			pbrMat->mBrdfLut->bind();
+			shader->setFloat("envIntensity", pbrMat->mEnvIntensity);
+			shader->setFloat("maxReflectionLod", pbrMat->mMaxReflectionLod);
+
+			for (int i = 0; i < 4; i++) {
+				if (static_cast<size_t>(i) < pointLights.size()) {
+					shader->setVector3("pointLights[" + std::to_string(i) + "].color", pointLights[i]->mColor);
+					shader->setVector3("pointLights[" + std::to_string(i) + "].position", pointLights[i]->getPosition());
+				}
+				else {
+					shader->setVector3("pointLights[" + std::to_string(i) + "].color", glm::vec3(0.0f));
+					shader->setVector3("pointLights[" + std::to_string(i) + "].position", glm::vec3(0.0f));
+				}
 			}
 
 		}

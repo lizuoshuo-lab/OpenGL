@@ -8,12 +8,16 @@ public:
 	~PbrMaterial();
 
 public:
-	Texture* mAlbedo{ nullptr };	//双线性插值
-	Texture* mRoughness{ nullptr };	//最临近插值
-	Texture* mNormal{ nullptr };//最临近插值
-	Texture* mMetallic{ nullptr };//最临近插值
-	Texture* mAo{ nullptr };//最临近插值
-	Texture* mIrradianceIndirect{ nullptr };//环境贴图IBL
+	Texture* mAlbedo{ nullptr };
+	Texture* mRoughness{ nullptr };
+	Texture* mNormal{ nullptr };
+	Texture* mMetallic{ nullptr };
+	Texture* mAo{ nullptr };
+	Texture* mIrradianceMap{ nullptr };
+	Texture* mPrefilterMap{ nullptr };
+	Texture* mBrdfLut{ nullptr };
+	float mEnvIntensity{ 1.0f };
+	float mMaxReflectionLod{ 4.0f };
 
 	//float mRoughness{ 0.1f };
 	//float mMetallic{ 0.6f };

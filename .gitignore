@@ -11,6 +11,7 @@ cmake_install.cmake
 *.vcxproj.user
 
 *.log
+imgui.ini
 *.exe
 *.pdb
 *.ilk

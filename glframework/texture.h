@@ -60,6 +60,11 @@ public:
 
 	static Texture* createExrTexture(const std::string& path);
 
+	static Texture* createEnvironmentCubeMap(Texture* equirectangularMap, uint32_t size = 512, unsigned int unit = 0);
+	static Texture* createIrradianceCubeMap(Texture* environmentMap, uint32_t size = 32, unsigned int unit = 0);
+	static Texture* createPrefilterCubeMap(Texture* environmentMap, uint32_t size = 128, uint32_t mipLevels = 5, unsigned int unit = 0);
+	static Texture* createBrdfLut(uint32_t size = 512, unsigned int unit = 0);
+
 	Texture();
 	Texture(const std::string& path, unsigned int unit, unsigned int internalFormat = GL_RGBA);
 	Texture(

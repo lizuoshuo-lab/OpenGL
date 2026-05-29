@@ -13,25 +13,18 @@ uniform mat4 projectionMatrix;
 
 uniform mat3 normalMatrix;
 
-//aPos作为attribute（属性）传入shader
-//不允许更改的
 void main()
 {
-// 将输入的顶点位置，转化为齐次坐标（3维-4维）
 	vec4 transformPosition = vec4(aPos, 1.0);
-
-	//做一个中间变量TransformPosition，用于计算四位位置与modelMatrix相乘的中间结果
 	transformPosition = modelMatrix * transformPosition;
-
-	//计算当前顶点的worldPosition，并且向后传输给FragmentShader
 	worldPosition = transformPosition.xyz;
 
 	gl_Position = projectionMatrix * viewMatrix * transformPosition;
 	
 	uv = aUV;
-//	normal =  transpose(inverse(mat3(modelMatrix))) * aNormal;
-	normal =  normalMatrix * aNormal;
-	vec3 tangent = normalize(mat3(modelMatrix) * aTangent);
+	normal = normalize(normalMatrix * aNormal);
+	vec3 tangent = normalize(normalMatrix * aTangent);
+	tangent = normalize(tangent - dot(tangent, normal) * normal);
 	vec3 bitangent = normalize(cross(normal, tangent));
 	tbn = mat3(tangent, bitangent, normal);
 }

@@ -118,20 +118,15 @@ void prepare() {
 	material->mRoughness = Texture::createNearestTexture("assets/textures/metal/metal3.jpg");
 	material->mMetallic = Texture::createNearestTexture("assets/textures/metal/metal4.jpg");
 	material->mAo = Texture::createNearestTexture("assets/textures/metal/metal5.jpg");
-	material->mIrradianceIndirect = Texture::createExrCubeMap(
-		{
-			"assets/textures/IBL/env_0.exr",
-			"assets/textures/IBL/env_1.exr",
-			"assets/textures/IBL/env_2.exr",
-			"assets/textures/IBL/env_3.exr",
-			"assets/textures/IBL/env_4.exr",
-			"assets/textures/IBL/env_5.exr",
-		}
-	);
+	auto hdrEnvironment = Texture::createExrTexture("assets/textures/brown_photostudio_01_4k.exr");
+	auto environmentCube = Texture::createEnvironmentCubeMap(hdrEnvironment, 512);
+	material->mIrradianceMap = Texture::createIrradianceCubeMap(environmentCube, 32);
+	material->mPrefilterMap = Texture::createPrefilterCubeMap(environmentCube, 128, 5);
+	material->mBrdfLut = Texture::createBrdfLut(512);
 
 	auto boxGeo = Geometry::createBox(1.0f);
 	auto boxMat = new CubeMaterial();
-	boxMat->mDiffuse = Texture::createExrTexture("assets/textures/brown_photostudio_01_4k.exr");
+	boxMat->mDiffuse = hdrEnvironment;
 	auto boxMesh = new Mesh(boxGeo, boxMat);
 	sceneOff->addChild(boxMesh);
 
