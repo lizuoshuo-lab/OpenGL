@@ -56,7 +56,7 @@ Framebuffer* fboMulti = nullptr;
 Framebuffer* fboResolve = nullptr;
 
 ScreenMaterial* smat = nullptr;
-//PbrMaterial* material = nullptr;
+PbrMaterial* pbrMaterial = nullptr;
 
 
 Mesh* upPlane = nullptr;
@@ -68,22 +68,58 @@ int HEIGHT = 1440;
 
 std::vector<PointLight*> pointLights{};
 
+const int MAX_DEMO_LIGHTS = 4;
+bool directLightingEnabled = false;
+bool lightEnabled[MAX_DEMO_LIGHTS]{ true, true, false, false };
+glm::vec3 lightUiTint[MAX_DEMO_LIGHTS]{
+	glm::vec3(1.0f, 1.0f, 1.0f),
+	glm::vec3(1.0f, 1.0f, 1.0f),
+	glm::vec3(1.0f, 1.0f, 1.0f),
+	glm::vec3(1.0f, 1.0f, 1.0f),
+};
+float lightUiPower[MAX_DEMO_LIGHTS]{ 80.0f, 80.0f, 80.0f, 80.0f };
+
+float cameraMoveSpeed = 0.1f;
+float cameraMouseSensitivity = 0.1f;
+
 
 Camera* camera = nullptr;
 GameCameraControl* cameraControl = nullptr;
 
-glm::vec3 clearColor{};
+glm::vec3 clearColor{ 0.1f, 0.13f, 0.25f };
+
+void syncPointLightColors() {
+	int lightCount = static_cast<int>(pointLights.size());
+	if (lightCount > MAX_DEMO_LIGHTS) {
+		lightCount = MAX_DEMO_LIGHTS;
+	}
+
+	for (int i = 0; i < lightCount; i++) {
+		if (directLightingEnabled && lightEnabled[i]) {
+			pointLights[i]->mColor = lightUiTint[i] * lightUiPower[i];
+		}
+		else {
+			pointLights[i]->mColor = glm::vec3(0.0f);
+		}
+	}
+}
 
 void OnResize(int width, int height) {
 	GL_CALL(glViewport(0, 0, width, height));
 }
 
 void OnKey(int key, int action, int mods) {
+	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard) {
+		return;
+	}
 	cameraControl->onKey(key, action, mods);
 }
 
 //鼠标按下/抬起
 void OnMouse(int button, int action, int mods) {
+	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse) {
+		return;
+	}
 	double x, y;
 	glApp->getCursorPosition(&x, &y);
 	cameraControl->onMouse(button, action, x, y);
@@ -91,12 +127,18 @@ void OnMouse(int button, int action, int mods) {
 
 //鼠标移动
 void OnCursor(double xpos, double ypos) {
+	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse) {
+		return;
+	}
 	cameraControl->onCursor(xpos, ypos);
 }
 
 //鼠标滚轮
 void OnScroll(double offset) {
-	cameraControl->onScroll(offset);
+	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse) {
+		return;
+	}
+	cameraControl->onScroll(static_cast<float>(offset));
 }
 
 
@@ -111,18 +153,18 @@ void prepare() {
 	//pass 01
 
 	auto geometry = Geometry::createSphere(2.0f);
-	auto material = new PbrMaterial();
-	material->mAlbedo = new Texture("assets/textures/metal/metal1.jpg", 0, GL_SRGB_ALPHA);
+	pbrMaterial = new PbrMaterial();
+	pbrMaterial->mAlbedo = new Texture("assets/textures/metal/metal1.jpg", 0, GL_SRGB_ALPHA);
 
-	material->mNormal = Texture::createNearestTexture("assets/textures/metal/metal2.jpg");
-	material->mRoughness = Texture::createNearestTexture("assets/textures/metal/metal3.jpg");
-	material->mMetallic = Texture::createNearestTexture("assets/textures/metal/metal4.jpg");
-	material->mAo = Texture::createNearestTexture("assets/textures/metal/metal5.jpg");
+	pbrMaterial->mNormal = Texture::createNearestTexture("assets/textures/metal/metal2.jpg");
+	pbrMaterial->mRoughness = Texture::createNearestTexture("assets/textures/metal/metal3.jpg");
+	pbrMaterial->mMetallic = Texture::createNearestTexture("assets/textures/metal/metal4.jpg");
+	pbrMaterial->mAo = Texture::createNearestTexture("assets/textures/metal/metal5.jpg");
 	auto hdrEnvironment = Texture::createExrTexture("assets/textures/brown_photostudio_01_4k.exr");
 	auto environmentCube = Texture::createEnvironmentCubeMap(hdrEnvironment, 512);
-	material->mIrradianceMap = Texture::createIrradianceCubeMap(environmentCube, 32);
-	material->mPrefilterMap = Texture::createPrefilterCubeMap(environmentCube, 128, 5);
-	material->mBrdfLut = Texture::createBrdfLut(512);
+	pbrMaterial->mIrradianceMap = Texture::createIrradianceCubeMap(environmentCube, 32);
+	pbrMaterial->mPrefilterMap = Texture::createPrefilterCubeMap(environmentCube, 128, 5);
+	pbrMaterial->mBrdfLut = Texture::createBrdfLut(512);
 
 	auto boxGeo = Geometry::createBox(1.0f);
 	auto boxMat = new CubeMaterial();
@@ -133,11 +175,7 @@ void prepare() {
 
 	for (int i = 1; i < 4; i++) {
 		for (int j = 1; j < 4; j++) {
-			// 为每个球体创建独立的PBR材质
-	
-
-			// 创建网格并设置位置
-			auto mesh = new Mesh(geometry, material);
+			auto mesh = new Mesh(geometry, pbrMaterial);
 			mesh->setPosition(glm::vec3(i * 5.0f, j * 5.0f, 0.0f));
 
 			sceneOff->addChild(mesh);
@@ -172,6 +210,7 @@ void prepare() {
 		pointLights.push_back(pointLight);
 	}
 
+	syncPointLightColors();
 }
 
 
@@ -187,8 +226,8 @@ void prepareCamera() {
 
 	cameraControl = new GameCameraControl();
 	cameraControl->setCamera(camera);
-	cameraControl->setSensitivity(0.1f);
-	cameraControl->setSpeed(0.1f);
+	cameraControl->setSensitivity(cameraMouseSensitivity);
+	cameraControl->setSpeed(cameraMoveSpeed);
 }
 
 
@@ -208,15 +247,92 @@ void renderIMGUI() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	//2 决定当前的GUI上面有哪些控件，从上到下
-	ImGui::Begin("MaterialEditor");
-	//ImGui::SliderFloat("bias:", &dirLight->mShadow->mBias, 0.0f, 0.01f,"%.4f");
-	//ImGui::SliderFloat("tightness:", &dirLight->mShadow->mDiskTightness, 0.0f, 5.0f,"%.3f");
-	//ImGui::SliderFloat("pcfRadius:", &dirLight->mShadow->mPcfRadius, 0.0f,0.01f,"%.4f");
-	ImGui::SliderFloat("exposure:", &smat->mExposure, 0.0f, 3.0f);
-	//ImGui::SliderFloat("Metallic:", &material->mMetallic, 0.0f, 1.0f);
-	//ImGui::SliderFloat("Roughness:", &material->mRoughness, 0.0f, 1.0f);
+	ImGui::SetNextWindowSize(ImVec2(390.0f, 560.0f), ImGuiCond_FirstUseEver);
+	ImGui::Begin("IBL Showcase");
 
+	ImGuiIO& io = ImGui::GetIO();
+	float frameMs = io.Framerate > 0.0f ? 1000.0f / io.Framerate : 0.0f;
+	ImGui::Text("FPS %.1f  Frame %.2f ms", io.Framerate, frameMs);
+	ImGui::Separator();
+
+	if (smat != nullptr && ImGui::CollapsingHeader("Output", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat("Exposure", &smat->mExposure, 0.0f, 3.0f, "%.2f");
+		ImGui::ColorEdit3("Clear Color", &clearColor.x);
+	}
+
+	if (pbrMaterial != nullptr && ImGui::CollapsingHeader("IBL", ImGuiTreeNodeFlags_DefaultOpen)) {
+		const char* debugViews[] = {
+			"Final",
+			"Direct Light",
+			"IBL Ambient",
+			"Diffuse IBL",
+			"Specular IBL",
+			"Irradiance Map",
+			"Prefilter Map",
+			"BRDF LUT",
+			"Normal",
+			"AO",
+			"Roughness",
+			"Metallic"
+		};
+		ImGui::Combo("View", &pbrMaterial->mDebugView, debugViews, IM_ARRAYSIZE(debugViews));
+		ImGui::SliderFloat("Environment", &pbrMaterial->mEnvIntensity, 0.0f, 5.0f, "%.2f");
+		ImGui::SliderFloat("Reflection LOD", &pbrMaterial->mMaxReflectionLod, 0.0f, 4.0f, "%.2f");
+		if (ImGui::Button("Reset IBL")) {
+			pbrMaterial->mDebugView = 0;
+			pbrMaterial->mEnvIntensity = 1.0f;
+			pbrMaterial->mMaxReflectionLod = 4.0f;
+		}
+	}
+
+	if (pbrMaterial != nullptr && ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat("Metallic", &pbrMaterial->mMetallicScale, 0.0f, 2.0f, "%.2f");
+		ImGui::SliderFloat("Roughness", &pbrMaterial->mRoughnessScale, 0.1f, 2.0f, "%.2f");
+		ImGui::SliderFloat("AO", &pbrMaterial->mAoScale, 0.0f, 2.0f, "%.2f");
+		ImGui::SliderFloat("Normal", &pbrMaterial->mNormalStrength, 0.0f, 2.0f, "%.2f");
+		if (ImGui::Button("Reset Material")) {
+			pbrMaterial->mMetallicScale = 1.0f;
+			pbrMaterial->mRoughnessScale = 1.0f;
+			pbrMaterial->mAoScale = 1.0f;
+			pbrMaterial->mNormalStrength = 1.0f;
+		}
+	}
+
+	if (ImGui::CollapsingHeader("Direct Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Enable Direct Lights", &directLightingEnabled);
+		int lightCount = static_cast<int>(pointLights.size());
+		if (lightCount > MAX_DEMO_LIGHTS) {
+			lightCount = MAX_DEMO_LIGHTS;
+		}
+
+		for (int i = 0; i < lightCount; i++) {
+			ImGui::PushID(i);
+			ImGui::Separator();
+			ImGui::Checkbox("Enabled", &lightEnabled[i]);
+			glm::vec3 lightPosition = pointLights[i]->getPosition();
+			if (ImGui::DragFloat3("Position", &lightPosition.x, 0.1f)) {
+				pointLights[i]->setPosition(lightPosition);
+			}
+			ImGui::ColorEdit3("Tint", &lightUiTint[i].x);
+			ImGui::SliderFloat("Power", &lightUiPower[i], 0.0f, 200.0f, "%.1f");
+			ImGui::PopID();
+		}
+	}
+
+	syncPointLightColors();
+
+	if (camera != nullptr && cameraControl != nullptr && ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::DragFloat3("Position", &camera->mPosition.x, 0.1f);
+		if (ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.01f, 1.0f, "%.2f")) {
+			cameraControl->setSpeed(cameraMoveSpeed);
+		}
+		if (ImGui::SliderFloat("Mouse Sensitivity", &cameraMouseSensitivity, 0.01f, 1.0f, "%.2f")) {
+			cameraControl->setSensitivity(cameraMouseSensitivity);
+		}
+		if (ImGui::Button("Reset Camera")) {
+			camera->mPosition = glm::vec3(0.0f, 0.0f, 5.0f);
+		}
+	}
 
 	ImGui::End();
 
@@ -230,7 +346,6 @@ void renderIMGUI() {
 
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
-
 
 int main() {
 	if (!glApp->init(WIDTH, HEIGHT)) {
@@ -255,6 +370,7 @@ int main() {
 
 	while (glApp->update()) {
 		cameraControl->update();
+		syncPointLightColors();
 
 		renderer->setClearColor(clearColor);
 		

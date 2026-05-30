@@ -392,6 +392,11 @@ void Renderer::renderObject(
 			pbrMat->mBrdfLut->bind();
 			shader->setFloat("envIntensity", pbrMat->mEnvIntensity);
 			shader->setFloat("maxReflectionLod", pbrMat->mMaxReflectionLod);
+			shader->setFloat("metallicScale", pbrMat->mMetallicScale);
+			shader->setFloat("roughnessScale", pbrMat->mRoughnessScale);
+			shader->setFloat("aoScale", pbrMat->mAoScale);
+			shader->setFloat("normalStrength", pbrMat->mNormalStrength);
+			shader->setInt("debugView", pbrMat->mDebugView);
 
 			for (int i = 0; i < 4; i++) {
 				if (static_cast<size_t>(i) < pointLights.size()) {

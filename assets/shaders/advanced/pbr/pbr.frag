@@ -21,6 +21,11 @@ uniform samplerCube prefilterMap;
 uniform sampler2D brdfLUT;
 uniform float envIntensity;
 uniform float maxReflectionLod;
+uniform float metallicScale;
+uniform float roughnessScale;
+uniform float aoScale;
+uniform float normalStrength;
+uniform int debugView;
 
 const float PI = 3.141592653589793;
 
@@ -68,11 +73,13 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 void main()
 {
 	vec3 albedo = texture(albedoTex, uv).rgb;
-	float metallic = texture(metallicTex, uv).r;
-	float roughness = clamp(texture(roughnessTex, uv).r, 0.04, 1.0);
-	float ao = texture(aoTex, uv).r;
+	float metallic = clamp(texture(metallicTex, uv).r * metallicScale, 0.0, 1.0);
+	float roughness = clamp(texture(roughnessTex, uv).r * roughnessScale, 0.04, 1.0);
+	float ao = clamp(texture(aoTex, uv).r * aoScale, 0.0, 1.0);
 
 	vec3 tangentNormal = texture(normalTex, uv).rgb * 2.0 - 1.0;
+	tangentNormal.xy *= normalStrength;
+	tangentNormal = normalize(tangentNormal);
 	vec3 N = normalize(tbn * tangentNormal);
 	vec3 V = normalize(cameraPosition - worldPosition);
 	vec3 R = reflect(-V, N);
@@ -115,8 +122,44 @@ void main()
 	vec2 envBRDF = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 	vec3 specular = prefilteredColor * (F * envBRDF.x + envBRDF.y);
 
-	vec3 ambient = (kD * diffuse + specular) * ao * envIntensity;
+	vec3 diffuseIbl = kD * diffuse;
+	vec3 specularIbl = specular;
+	vec3 ambient = (diffuseIbl + specularIbl) * ao * envIntensity;
 	vec3 color = ambient + Lo;
+
+	if (debugView == 1) {
+		color = Lo;
+	}
+	else if (debugView == 2) {
+		color = ambient;
+	}
+	else if (debugView == 3) {
+		color = diffuseIbl * ao * envIntensity;
+	}
+	else if (debugView == 4) {
+		color = specularIbl * ao * envIntensity;
+	}
+	else if (debugView == 5) {
+		color = irradiance;
+	}
+	else if (debugView == 6) {
+		color = prefilteredColor;
+	}
+	else if (debugView == 7) {
+		color = vec3(envBRDF, 0.0);
+	}
+	else if (debugView == 8) {
+		color = N * 0.5 + 0.5;
+	}
+	else if (debugView == 9) {
+		color = vec3(ao);
+	}
+	else if (debugView == 10) {
+		color = vec3(roughness);
+	}
+	else if (debugView == 11) {
+		color = vec3(metallic);
+	}
 
 	FragColor = vec4(color, 1.0);
 }
