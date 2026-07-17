@@ -11,7 +11,8 @@ Framebuffer* Framebuffer::createShadowFbo(unsigned int width, unsigned int heigh
 	fb->mDepthAttachment = Texture::createDepthAttachment(width, height, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fb->mDepthAttachment->getTexture(), 0);
 	
-	glDrawBuffer(GL_NONE);//显式的告诉opengl， 我们当前这个fbo没有颜色输出
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	return fb;
@@ -24,10 +25,11 @@ Framebuffer* Framebuffer::createCSMShadowFbo(unsigned int width, unsigned int he
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-	//加入深度附件
+	//鍔犲叆娣卞害闄勪欢
 	Texture* depthAttachment = Texture::createDepthAttachmentCSMArray(width, height, layerNumber, 0);
 	glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthAttachment->getTexture(), 0, 0);
 	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	fb->mFBO = fbo;
@@ -93,20 +95,20 @@ Framebuffer::Framebuffer(unsigned int width, unsigned int height) {
 	mWidth = width;
 	mHeight = height;
 
-	//1 生成fbo对象并且绑定
+	//1 鐢熸垚fbo瀵硅薄骞朵笖缁戝畾
 	glGenFramebuffers(1, &mFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, mFBO);
 
 
-	//2 生成颜色附件，并且加入fbo
+	//2 鐢熸垚棰滆壊闄勪欢锛屽苟涓斿姞鍏bo
 	mColorAttachment = Texture::createColorAttachment(mWidth, mHeight, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mColorAttachment->getTexture(), 0);
 
-	//3 生成depth Stencil附件，加入fbo
+	//3 鐢熸垚depth Stencil闄勪欢锛屽姞鍏bo
 	mDepthStencilAttachment = Texture::createDepthStencilAttachment(mWidth, mHeight, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, mDepthStencilAttachment->getTexture(), 0);
 
-	//检查当前构建的fbo是否完整
+	//妫�鏌ュ綋鍓嶆瀯寤虹殑fbo鏄惁瀹屾暣
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "Error:FrameBuffer is not complete!" << std::endl;
 	}
@@ -147,5 +149,8 @@ Framebuffer::~Framebuffer() {
 
 	if (mDepthStencilAttachment != nullptr) {
 		delete mDepthStencilAttachment;
+	}
+	if (mDepthAttachment != nullptr) {
+		delete mDepthAttachment;
 	}
 }

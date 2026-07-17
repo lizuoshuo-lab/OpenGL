@@ -1,5 +1,6 @@
 #pragma once
 #include"core.h"
+#include <cstddef>
 #include <string>
 
 class Texture {
@@ -10,7 +11,16 @@ public:
 		unsigned int unit,
 		unsigned char* dataIn,
 		uint32_t widthIn,
-		uint32_t heightIn
+		uint32_t heightIn,
+		unsigned int internalFormat = GL_SRGB_ALPHA
+	);
+	static Texture* createSolidTexture(
+		const std::string& name,
+		unsigned char red,
+		unsigned char green,
+		unsigned char blue,
+		unsigned char alpha = 255,
+		unsigned int internalFormat = GL_RGBA
 	);
 
 	static Texture* createColorAttachment(
@@ -85,6 +95,7 @@ public:
 	int getWidth()const { return mWidth; }
 	int getHeight()const { return mHeight; }
 	GLuint getTexture()const { return mTexture; }
+	std::size_t getEstimatedGpuBytes() const { return mEstimatedGpuBytes; }
 
 private:
 	GLuint mTexture{ 0 };
@@ -92,7 +103,8 @@ private:
 	int mHeight{ 0 };
 	unsigned int mUnit{ 0 };
 	unsigned int mTextureTarget{ GL_TEXTURE_2D };
+	std::size_t mEstimatedGpuBytes{ 0 };
 
-	//注意：静态！！属于类的不属于某个对象
+	//娉ㄦ剰锛氶潤鎬侊紒锛佸睘浜庣被鐨勪笉灞炰簬鏌愪釜瀵硅薄
 	static std::map<std::string, Texture*> mTextureCache;
 };

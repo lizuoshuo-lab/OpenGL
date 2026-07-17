@@ -5,6 +5,7 @@ in vec2 uv;
 in vec3 normal;
 in vec3 worldPosition;
 in mat3 tbn;
+in vec4 softShadowPosition;
 
 uniform vec3 cameraPosition;
 
@@ -25,9 +26,78 @@ uniform float metallicScale;
 uniform float roughnessScale;
 uniform float aoScale;
 uniform float normalStrength;
+uniform vec3 baseColorFactor;
+uniform float opacity;
+uniform int alphaMask;
+uniform float alphaCutoff;
+uniform int metallicChannel;
+uniform int roughnessChannel;
+uniform int aoChannel;
 uniform int debugView;
+uniform int softShadowEnabled;
+uniform sampler2D softShadowMap;
+uniform vec3 softShadowLightPosition;
+uniform float softShadowStrength;
+uniform float softShadowBias;
+uniform float softShadowRadius;
 
 const float PI = 3.141592653589793;
+
+float sampleChannel(vec4 value, int channel)
+{
+	if (channel == 1) return value.g;
+	if (channel == 2) return value.b;
+	if (channel == 3) return value.a;
+	return value.r;
+}
+
+float calculateSoftShadow(vec3 surfaceNormal)
+{
+	if (softShadowEnabled == 0 || softShadowPosition.w <= 0.0) {
+		return 0.0;
+	}
+
+	vec3 projected = softShadowPosition.xyz / softShadowPosition.w;
+	projected = projected * 0.5 + 0.5;
+	if (projected.z <= 0.0 || projected.z >= 1.0 ||
+		projected.x <= 0.0 || projected.x >= 1.0 ||
+		projected.y <= 0.0 || projected.y >= 1.0) {
+		return 0.0;
+	}
+
+	const vec2 poissonDisk[16] = vec2[](
+		vec2(-0.94201624, -0.39906216),
+		vec2( 0.94558609, -0.76890725),
+		vec2(-0.09418410, -0.92938870),
+		vec2( 0.34495938,  0.29387760),
+		vec2(-0.91588581,  0.45771432),
+		vec2(-0.81544232, -0.87912464),
+		vec2(-0.38277543,  0.27676845),
+		vec2( 0.97484398,  0.75648379),
+		vec2( 0.44323325, -0.97511554),
+		vec2( 0.53742981, -0.47373420),
+		vec2(-0.26496911, -0.41893023),
+		vec2( 0.79197514,  0.19090188),
+		vec2(-0.24188840,  0.99706507),
+		vec2(-0.81409955,  0.91437590),
+		vec2( 0.19984126,  0.78641367),
+		vec2( 0.14383161, -0.14100790)
+	);
+
+	vec3 lightDirection = normalize(softShadowLightPosition - worldPosition);
+	float normalBias = max(softShadowBias * (1.0 - dot(surfaceNormal, lightDirection)), softShadowBias * 0.25);
+	vec2 texelSize = 1.0 / vec2(textureSize(softShadowMap, 0));
+	float occlusion = 0.0;
+	for (int i = 0; i < 16; ++i) {
+		float closestDepth = texture(
+			softShadowMap,
+			projected.xy + poissonDisk[i] * texelSize * softShadowRadius
+		).r;
+		occlusion += projected.z - normalBias > closestDepth ? 1.0 : 0.0;
+	}
+
+	return (occlusion / 16.0) * softShadowStrength;
+}
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
@@ -72,10 +142,15 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 
 void main()
 {
-	vec3 albedo = texture(albedoTex, uv).rgb;
-	float metallic = clamp(texture(metallicTex, uv).r * metallicScale, 0.0, 1.0);
-	float roughness = clamp(texture(roughnessTex, uv).r * roughnessScale, 0.04, 1.0);
-	float ao = clamp(texture(aoTex, uv).r * aoScale, 0.0, 1.0);
+	vec4 albedoSample = texture(albedoTex, uv);
+	float alpha = albedoSample.a * opacity;
+	if (alphaMask != 0 && alpha < alphaCutoff) {
+		discard;
+	}
+	vec3 albedo = albedoSample.rgb * baseColorFactor;
+	float metallic = clamp(sampleChannel(texture(metallicTex, uv), metallicChannel) * metallicScale, 0.0, 1.0);
+	float roughness = clamp(sampleChannel(texture(roughnessTex, uv), roughnessChannel) * roughnessScale, 0.04, 1.0);
+	float ao = clamp(sampleChannel(texture(aoTex, uv), aoChannel) * aoScale, 0.0, 1.0);
 
 	vec3 tangentNormal = texture(normalTex, uv).rgb * 2.0 - 1.0;
 	tangentNormal.xy *= normalStrength;
@@ -84,7 +159,7 @@ void main()
 	vec3 V = normalize(cameraPosition - worldPosition);
 	vec3 R = reflect(-V, N);
 	float NdotV = max(dot(N, V), 0.0);
-
+	float softShadow = calculateSoftShadow(N);
 	vec3 F0 = vec3(0.04);
 	F0 = mix(F0, albedo, metallic);
 
@@ -108,7 +183,8 @@ void main()
 		vec3 kS = F;
 		vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-		Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+		float directVisibility = i == 0 ? 1.0 - softShadow : 1.0;
+		Lo += (kD * albedo / PI + specular) * radiance * NdotL * directVisibility;
 	}
 
 	vec3 F = fresnelSchlickRoughness(NdotV, F0, roughness);
@@ -161,5 +237,5 @@ void main()
 		color = vec3(metallic);
 	}
 
-	FragColor = vec4(color, 1.0);
+	FragColor = vec4(color, alpha);
 }

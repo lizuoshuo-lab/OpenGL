@@ -11,39 +11,35 @@ TrackBallCameraControl::~TrackBallCameraControl() {
 
 void TrackBallCameraControl::onCursor(double xpos, double ypos) {
 	if (mLeftMouseDown) {
-		//µ÷ÕûÏà»úµÄ¸÷Àà²ÎÊý
-		//1 ¼ÆËã¾­Ïß¸úÎ³ÏßÐý×ªµÄÔöÁ¿½Ç¶È(Õý¸º¶¼ÓÐ¿ÉÄÜ£©
-		float deltaX = (xpos - mCurrentX) * mSensitivity;
-		float deltaY = (ypos - mCurrentY) * mSensitivity;
+		const float deltaX = static_cast<float>(xpos - mCurrentX) * mSensitivity;
+		const float deltaY = static_cast<float>(ypos - mCurrentY) * mSensitivity;
 
-		//2 ·Ö¿ªpitch¸úyaw¸÷×Ô¼ÆËã
 		pitch(-deltaY);
 		yaw(-deltaX);
 	}
 	else if (mMiddleMouseDown) {
-		float deltaX = (xpos - mCurrentX) * mMoveSpeed;
-		float deltaY = (ypos - mCurrentY) * mMoveSpeed;
+		const float deltaX = static_cast<float>(xpos - mCurrentX) * mMoveSpeed;
+		const float deltaY = static_cast<float>(ypos - mCurrentY) * mMoveSpeed;
 
 		mCamera->mPosition += mCamera->mUp * deltaY;
 		mCamera->mPosition -= mCamera->mRight * deltaX;
 	}
 
 
-	mCurrentX = xpos;
-	mCurrentY = ypos;
+	mCurrentX = static_cast<float>(xpos);
+	mCurrentY = static_cast<float>(ypos);
 }
 
 void TrackBallCameraControl::pitch(float angle) {
-	//ÈÆ×ÅmRightÏòÁ¿ÔÚÐý×ª
+	// ç»•ç›¸æœºå³è½´æ—‹è½¬ã€‚
 	auto mat = glm::rotate(glm::mat4(1.0f), glm::radians(angle), mCamera->mRight);
 
-	//Ó°Ïìµ±Ç°Ïà»úµÄupÏòÁ¿ºÍÎ»ÖÃ 
-	mCamera->mUp = mat * glm::vec4(mCamera->mUp, 0.0f);//vec4¸øµ½vec3£¬¸øÁËxyz
+	mCamera->mUp = mat * glm::vec4(mCamera->mUp, 0.0f);
 	mCamera->mPosition = mat * glm::vec4(mCamera->mPosition, 1.0f);
 }
 
 void TrackBallCameraControl::yaw(float angle) {
-	//ÈÆ×ÅÊÀ½ç×ø±êÏµµÄyÖáÐý×ª
+	// ç»•ä¸–ç•Œåæ ‡ç³» Y è½´æ—‹è½¬ã€‚
 	auto mat = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0.0f,1.0f,0.0f));
 	mCamera->mUp = mat * glm::vec4(mCamera->mUp, 0.0f);
 	mCamera->mRight = mat * glm::vec4(mCamera->mRight, 0.0f);

@@ -2,12 +2,17 @@
 #include<glad/glad.h>
 #include<GLFW/glfw3.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
-//初始化Application的静态变量
+
 Application* Application::mInstance = nullptr;
 Application* Application::getInstance() {
-	//如果mInstance已经实例化了（new出来了），就直接返回
-	//否则需要先new出来，再返回
 	if (mInstance == nullptr) {
 		mInstance = new Application();
 	}
@@ -28,43 +33,52 @@ bool Application::init(const int& width, const int& height) {
 	mWidth = width;
 	mHeight = height;
 
-	//1 初始化GLFW基本环境
-	glfwInit();
-	//1.1 设置OpenGL主版本号、次版本号
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-	//1.2 设置OpenGL启用核心模式（非立即渲染模式）
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef _WIN32
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#endif
 
-	//2 创建窗体对象
-	mWindow = glfwCreateWindow(mWidth, mHeight, "OpenGLStudy", NULL, NULL);
-	if (mWindow == NULL) {
+	if (glfwInit() != GLFW_TRUE) {
+		const char* description = nullptr;
+		const int errorCode = glfwGetError(&description);
+		std::cerr << "GLFW initialization failed (" << errorCode << "): "
+			<< (description != nullptr ? description : "unknown error") << std::endl;
 		return false;
 	}
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_FALSE);
 
-	//**设置当前窗体对象为OpenGL的绘制舞台
+	mWindow = glfwCreateWindow(mWidth, mHeight, "OpenGL Renderer", NULL, NULL);
+	if (mWindow == NULL) {
+		const char* description = nullptr;
+		const int errorCode = glfwGetError(&description);
+		std::cerr << "GLFW window creation failed (" << errorCode << "): "
+			<< (description != nullptr ? description : "unknown error") << std::endl;
+		glfwTerminate();
+		return false;
+	}
+	glfwGetWindowPos(mWindow, &mWindowedX, &mWindowedY);
+	glfwGetWindowSize(mWindow, &mWindowedWidth, &mWindowedHeight);
+
 	glfwMakeContextCurrent(mWindow);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		return false;
 	}
+	setVsync(false);
 	
 	glfwSetFramebufferSizeCallback(mWindow, frameBufferSizeCallback);
 
-	//this就是当前全局唯一的Application对象
 	glfwSetWindowUserPointer(mWindow, this);
 
-	//键盘响应
 	glfwSetKeyCallback(mWindow, keyCallback);
 
-	//鼠标点击事件响应
 	glfwSetMouseButtonCallback(mWindow, mouseCallback);
 
-	//鼠标移动事件响应
 	glfwSetCursorPosCallback(mWindow, cursorCallback);
 
-	//鼠标滚轮消息
 	glfwSetScrollCallback(mWindow, scrollCallback);
 
 	return true;
@@ -75,19 +89,26 @@ bool Application::update() {
 		return false;
 	}
 
-	//接收并分发窗体消息
-	//检查消息队列是否有需要处理的鼠标、键盘等消息
-	//如果有的话就将消息批量处理，清空队列
 	glfwPollEvents();
 
-	//切换双缓存
+	int width = 0;
+	int height = 0;
+	getFramebufferSize(&width, &height);
+	if (width > 0 && height > 0 &&
+		(width != static_cast<int>(mWidth) || height != static_cast<int>(mHeight))) {
+		mWidth = width;
+		mHeight = height;
+		if (mResizeCallback != nullptr) {
+			mResizeCallback(width, height);
+		}
+	}
+
 	glfwSwapBuffers(mWindow);
 
 	return true;
 }
 
 void Application::destroy() {
-	//退出程序前做相关清理
 	glfwTerminate();
 }
 
@@ -95,18 +116,125 @@ void Application::getCursorPosition(double* x, double* y) {
 	glfwGetCursorPos(mWindow, x, y);
 }
 
+void Application::getFramebufferSize(int* width, int* height) const {
+	if (width == nullptr || height == nullptr) {
+		return;
+	}
+
+	*width = 0;
+	*height = 0;
+	if (mWindow == nullptr) {
+		return;
+	}
+
+	if (mFullscreen) {
+		GLFWmonitor* monitor = glfwGetWindowMonitor(mWindow);
+		if (monitor == nullptr) {
+			monitor = glfwGetPrimaryMonitor();
+		}
+		const GLFWvidmode* mode = monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
+		if (mode != nullptr) {
+			*width = mode->width;
+			*height = mode->height;
+			return;
+		}
+	}
+
+#ifdef _WIN32
+	RECT clientRect{};
+	HWND nativeWindow = glfwGetWin32Window(mWindow);
+	DPI_AWARENESS_CONTEXT previousContext =
+		SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+	const bool hasClientRect =
+		nativeWindow != nullptr && GetClientRect(nativeWindow, &clientRect) != FALSE;
+	if (previousContext != nullptr) {
+		SetThreadDpiAwarenessContext(previousContext);
+	}
+	if (hasClientRect) {
+		*width = clientRect.right - clientRect.left;
+		*height = clientRect.bottom - clientRect.top;
+		return;
+	}
+#endif
+
+	glfwGetFramebufferSize(mWindow, width, height);
+}
+
+void Application::setFullscreen(bool fullscreen) {
+	if (mWindow == nullptr || fullscreen == mFullscreen) {
+		return;
+	}
+
+	if (fullscreen) {
+		glfwGetWindowPos(mWindow, &mWindowedX, &mWindowedY);
+		glfwGetWindowSize(mWindow, &mWindowedWidth, &mWindowedHeight);
+
+		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+		const GLFWvidmode* mode = monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
+		if (monitor == nullptr || mode == nullptr) {
+			return;
+		}
+		int monitorX = 0;
+		int monitorY = 0;
+		glfwGetMonitorPos(monitor, &monitorX, &monitorY);
+
+		mFullscreen = true;
+		glfwSetWindowAttrib(mWindow, GLFW_DECORATED, GLFW_FALSE);
+		glfwSetWindowMonitor(
+			mWindow,
+			nullptr,
+			monitorX,
+			monitorY,
+			mode->width,
+			mode->height,
+			GLFW_DONT_CARE);
+		glfwFocusWindow(mWindow);
+	} else {
+		mFullscreen = false;
+		glfwSetWindowAttrib(mWindow, GLFW_DECORATED, GLFW_TRUE);
+		glfwSetWindowMonitor(
+			mWindow,
+			nullptr,
+			mWindowedX,
+			mWindowedY,
+			mWindowedWidth,
+			mWindowedHeight,
+			GLFW_DONT_CARE);
+	}
+
+	int width = 0;
+	int height = 0;
+	getFramebufferSize(&width, &height);
+	if (width > 0 && height > 0 &&
+		(width != static_cast<int>(mWidth) || height != static_cast<int>(mHeight))) {
+		mWidth = width;
+		mHeight = height;
+		if (mResizeCallback != nullptr) {
+			mResizeCallback(width, height);
+		}
+	}
+}
+
+void Application::toggleFullscreen() {
+	setFullscreen(!mFullscreen);
+}
+
+void Application::setVsync(bool enabled) {
+	mVsync = enabled;
+	if (mWindow != nullptr) {
+		glfwSwapInterval(enabled ? 1 : 0);
+	}
+}
+
 
 void Application::frameBufferSizeCallback(GLFWwindow* window, int width, int height) {
-	std::cout << "Resize" << std::endl;
-
 	Application* self = (Application*)glfwGetWindowUserPointer(window);
+	self->getFramebufferSize(&width, &height);
+	self->mWidth = width;
+	self->mHeight = height;
 	if (self->mResizeCallback != nullptr) {
 		self->mResizeCallback(width, height);
 	}
-
-	//if (Application::getInstance()->mResizeCallback != nullptr) {
-	//	Application::getInstance()->mResizeCallback(width, height);
-	//}
 }
 
 void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -130,7 +258,6 @@ void Application::cursorCallback(GLFWwindow* window, double xpos, double ypos) {
 	}
 }
 
-//滚动消息的xoffset没用
 void Application::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 	Application* self = (Application*)glfwGetWindowUserPointer(window);
 	if (self->mScrollCallback != nullptr) {

@@ -9,16 +9,16 @@ GameCameraControl::~GameCameraControl() {
 }
 
 void GameCameraControl::onCursor(double xpos, double ypos) {
-	float deltaX = (xpos - mCurrentX) * mSensitivity;
-	float deltaY = (ypos - mCurrentY) * mSensitivity;
+	const float deltaX = static_cast<float>(xpos - mCurrentX) * mSensitivity;
+	const float deltaY = static_cast<float>(ypos - mCurrentY) * mSensitivity;
 	
 	if (mRightMouseDown) {
 		pitch(-deltaY);
 		yaw(-deltaX);
 	}
 
-	mCurrentX = xpos;
-	mCurrentY = ypos;
+	mCurrentX = static_cast<float>(xpos);
+	mCurrentY = static_cast<float>(ypos);
 }
 
 void GameCameraControl::pitch(float angle) {
@@ -28,7 +28,7 @@ void GameCameraControl::pitch(float angle) {
 		return;
 	}
 
-//ÔÚgameCameraControlµÄÇé¿öÏÂ£¬pitch²»»áÓ°ÏìmPosition
+	// ç¬¬ä¸€äººç§°ä¿¯ä»°åªè°ƒæ•´æœå‘ï¼Œä¸ç§»åŠ¨ç›¸æœºä½ç½®ã€‚
 	auto mat = glm::rotate(glm::mat4(1.0f), glm::radians(angle), mCamera->mRight);
 	mCamera->mUp = mat * glm::vec4(mCamera->mUp, 0.0f);
 }
@@ -41,7 +41,7 @@ void GameCameraControl::yaw(float angle) {
 
 
 void GameCameraControl::update() {
-	//×îÖÕÒÆ¶¯·½Ïò
+	// åˆå¹¶å½“å‰æŒ‰é”®å¯¹åº”çš„ç§»åŠ¨æ–¹å‘ã€‚
 	glm::vec3 direction(0.0f);
 
 	auto front = glm::cross(mCamera->mUp, mCamera->mRight);
@@ -65,13 +65,13 @@ void GameCameraControl::update() {
 	}
 	if (mKeyMap[GLFW_KEY_Q]) {
 		direction += up;
-	}if (mKeyMap[GLFW_KEY_E]) {
+	}
+	if (mKeyMap[GLFW_KEY_E]) {
 		direction -= up;
 	}
 
 
-	//´ËÊ±directionÓÐ¿ÉÄÜ²»Îª1µÄ³¤¶È£¬Ò²ÓÐ¿ÉÄÜÊÇ0µÄ³¤¶È
-	if (glm::length(direction) != 0) {
+	if (glm::length(direction) > 0.0f) {
 		direction = glm::normalize(direction);
 		mCamera->mPosition += direction * mSpeed;
 	}

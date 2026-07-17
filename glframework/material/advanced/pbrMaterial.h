@@ -16,16 +16,15 @@ public:
 	Texture* mIrradianceMap{ nullptr };
 	Texture* mPrefilterMap{ nullptr };
 	Texture* mBrdfLut{ nullptr };
+	glm::vec4 mBaseColorFactor{ 1.0f };
 	float mEnvIntensity{ 1.0f };
 	float mMaxReflectionLod{ 4.0f };
 	float mMetallicScale{ 1.0f };
 	float mRoughnessScale{ 1.0f };
 	float mAoScale{ 1.0f };
 	float mNormalStrength{ 1.0f };
+	int mMetallicChannel{ 0 };
+	int mRoughnessChannel{ 0 };
+	int mAoChannel{ 0 };
 	int mDebugView{ 0 };
-
-	//float mRoughness{ 0.1f };
-	//float mMetallic{ 0.6f };
-
-	
 };
