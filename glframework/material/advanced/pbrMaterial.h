@@ -23,6 +23,7 @@ public:
 	float mRoughnessScale{ 1.0f };
 	float mAoScale{ 1.0f };
 	float mNormalStrength{ 1.0f };
+	float mSurfaceVariation{ 0.0f };
 	int mMetallicChannel{ 0 };
 	int mRoughnessChannel{ 0 };
 	int mAoChannel{ 0 };

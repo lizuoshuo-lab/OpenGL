@@ -9,4 +9,7 @@ public:
 
 public:
 	Texture* mDiffuse{ nullptr };
+	float mIntensity{ 1.0f };
+	float mBlackLevel{ 0.0f };
+	float mStarIntensity{ 0.0f };
 };

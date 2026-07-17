@@ -9,6 +9,7 @@ out vec3 normal;
 out vec3 worldPosition;
 out mat3 tbn;
 out vec4 softShadowPosition;
+flat out vec3 instanceOrigin;
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
@@ -25,6 +26,7 @@ void main()
 	}
 	vec4 transformPosition = renderModel * vec4(aPos, 1.0);
 	worldPosition = transformPosition.xyz;
+	instanceOrigin = renderModel[3].xyz;
 	softShadowPosition = softShadowMatrix * transformPosition;
 
 	gl_Position = projectionMatrix * viewMatrix * transformPosition;

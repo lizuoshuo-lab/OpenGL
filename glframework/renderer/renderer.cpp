@@ -449,6 +449,9 @@ void Renderer::renderObject(
 			shader->setMatrix4x4("projectionMatrix", camera->getProjectionMatrix());
 
 			shader->setInt("sphericalSampler", 0);
+			shader->setFloat("environmentIntensity", cubeMat->mIntensity);
+			shader->setFloat("environmentBlackLevel", cubeMat->mBlackLevel);
+			shader->setFloat("starIntensity", cubeMat->mStarIntensity);
 			cubeMat->mDiffuse->bind();
 		}
 										break;
@@ -504,6 +507,7 @@ void Renderer::renderObject(
 			shader->setFloat("roughnessScale", pbrMat->mRoughnessScale);
 			shader->setFloat("aoScale", pbrMat->mAoScale);
 			shader->setFloat("normalStrength", pbrMat->mNormalStrength);
+			shader->setFloat("surfaceVariation", pbrMat->mSurfaceVariation);
 			shader->setVector3("baseColorFactor", glm::vec3(pbrMat->mBaseColorFactor));
 			shader->setFloat("opacity", pbrMat->mOpacity);
 			shader->setInt("alphaMask", pbrMat->mAlphaMask ? 1 : 0);

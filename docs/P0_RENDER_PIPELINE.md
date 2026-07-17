@@ -49,14 +49,14 @@ ImGui 的 `Output Buffer` 可以全屏查看 World Position、World Normal、Alb
 - Instance / LOD：显示逻辑总实例、可见实例、剔除数量及 High/Medium/Low 分布。
 - VRAM Estimate：几何、纹理与当前分辨率 Render Target 的字节估算，不等同于驱动实际驻留值。
 
-## Rock Field 优化
+## Asteroid Belt 优化
 
-展示场景使用 Poly Haven 的 Rock 07 高精度模型，并生成 Medium/Low 两级简化岩石。确定性散布保证 Reference 与 Optimized 使用相同场景和相机。
+展示场景使用 Poly Haven 的 Moon Rock 01、02、06 三套 2K glTF 月岩，构成 2500 颗确定性分布的小行星带。三组材质分别表现硅酸盐、碳质岩和金属陨石；中心行星使用 Moon Meteor 01 的 Albedo、Normal、Roughness 与 AO，外层透明大气在 Forward Pass 合成。Medium/Low 两级程序化代理保留各自材质分组，Reference 与 Optimized 使用相同场景和相机。
 
 | 模式 | Frustum Culling | GPU Instancing | LOD |
 | --- | --- | --- | --- |
 | Reference | Off | Off | High only |
-| Optimized | On | On | 30 / 55 world-unit thresholds |
+| Optimized | On | On | 75 / 125 world-unit thresholds |
 
 Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 AABB 视锥裁剪，再按 LOD 分组提交实例。AABB 可在 ImGui 中随时显示，检查剔除边界。
 
@@ -66,29 +66,33 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 
 | 指标 | Reference | Optimized | 降幅 |
 | --- | ---: | ---: | ---: |
-| CPU Frame | 14.557 ms | 2.856 ms | 80.4% |
-| GPU Frame | 0.823 ms | 0.363 ms | 55.9% |
-| Draw Calls | 421 | 29 | 93.1% |
-| Triangles | 5,863,442 | 690,278 | 88.2% |
+| CPU Frame | 175.311 ms | 12.249 ms | 93.01% |
+| GPU Frame | 65.955 ms | 0.413 ms | 99.37% |
+| Draw Calls | 4,958 | 28 | 99.44% |
+| Triangles | 23,860,254 | 2,078,490 | 91.29% |
 
 ## 操作入口
 
-1. 在 `Showcase` 选择 `GPU Rock Field`。
+1. 在 `Showcase` 选择 `GPU Asteroid Belt`。
 2. 在 `Render Pipeline` 切换 Deferred/Forward、GBuffer、SSAO、Bloom、Tone Mapper、Culling、Instancing、LOD 和 AABB。
 3. 在 `Performance` 查看整帧与各 Pass 数据。
 4. 在 `Optimization A/B` 点击 `Run Reference vs Optimized`，程序会自动完成两组预热和采样。
+5. 在 `Asteroid Materials` 分别调整三类小行星的 Base Color、Metallic 与 Roughness。
 
 命令行也可无人值守执行：
 
 ```powershell
 # 跑完 A/B 后自动关闭
-.\Debug\openglStudy.exe --benchmark-exit
+.\Debug\openglStudy.exe --showcase=8 --benchmark-exit --no-ui
 
 # 在第 90 帧导出 4K Back Buffer，成功后自动关闭
-.\Debug\openglStudy.exe --fullscreen --showcase=8 --screenshot=verification\rock_field_4k.png
+.\Debug\openglStudy.exe --fullscreen --showcase=8 --no-ui --screenshot=verification\asteroid_belt_4k.png
 ```
 
 ## 资产来源
 
-- [Rock 07](https://polyhaven.com/a/rock_07)，Jenelle van Heerden / Poly Haven，CC0。
-- [Forest Slope HDRI](https://polyhaven.com/a/forest_slope)，Poly Haven，CC0。
+- [Moon Rock 01](https://polyhaven.com/a/moon_rock_01)，Poly Haven，CC0。
+- [Moon Rock 02](https://polyhaven.com/a/moon_rock_02)，Poly Haven，CC0。
+- [Moon Rock 06](https://polyhaven.com/a/moon_rock_06)，Poly Haven，CC0。
+- [Moon Meteor 01](https://polyhaven.com/a/moon_meteor_01)，Poly Haven，CC0。
+- [Qwantani Night Pure Sky](https://polyhaven.com/a/qwantani_night_puresky)，Poly Haven，CC0。

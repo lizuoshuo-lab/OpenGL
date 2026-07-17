@@ -47,6 +47,7 @@ Texture* outdoorPrefilterMap = nullptr;
 
 std::vector<PbrMaterial*> pbrMaterials;
 std::vector<PbrMaterial*> materialMatrixMaterials;
+std::vector<PbrMaterial*> asteroidMaterials;
 std::vector<PointLight*> pointLights;
 
 struct ShowcaseEntry {
@@ -384,12 +385,35 @@ void selectShowcase(int index) {
 	showcases[selectedShowcase].object->setScale(glm::vec3(1.0f));
 	const bool shadowScene = showcases[selectedShowcase].supportsSoftShadow;
 	const bool outdoorScene = selectedShowcase == optimizationShowcaseIndex;
+	const bool chessShadowScene = shadowScene && !outdoorScene;
+	if (PerspectiveCamera* perspective = dynamic_cast<PerspectiveCamera*>(camera)) {
+		perspective->mFovy = outdoorScene ? 44.0f : 60.0f;
+	}
 	autoRotateShowcase = !shadowScene && selectedShowcase != optimizationShowcaseIndex;
 	lightEnabled[0] = true;
-	lightEnabled[1] = !shadowScene;
-	lightUiPower[0] = shadowScene ? 200.0f : 80.0f;
+	lightEnabled[1] = outdoorScene || !shadowScene;
+	lightUiPower[0] = outdoorScene ? 340000.0f : (chessShadowScene ? 200.0f : 80.0f);
+	lightUiPower[1] = outdoorScene ? 85000.0f : 80.0f;
+	lightUiTint[0] = outdoorScene
+		? glm::vec3(1.0f, 0.80f, 0.62f)
+		: glm::vec3(1.0f);
+	lightUiTint[1] = outdoorScene
+		? glm::vec3(0.28f, 0.48f, 1.0f)
+		: glm::vec3(1.0f);
+	if (!pointLights.empty()) {
+		pointLights[0]->setPosition(
+			outdoorScene ? glm::vec3(-240.0f, 160.0f, 300.0f) : glm::vec3(-4.5f, 6.5f, 3.0f)
+		);
+	}
+	if (pointLights.size() > 1) {
+		pointLights[1]->setPosition(
+			outdoorScene ? glm::vec3(220.0f, -120.0f, 180.0f) : glm::vec3(5.0f, 5.5f, -5.0f)
+		);
+	}
 	if (pbrMaterial != nullptr) {
-		pbrMaterial->mEnvIntensity = shadowScene ? 0.4f : 1.0f;
+		pbrMaterial->mEnvIntensity = chessShadowScene ? 0.4f : (outdoorScene ? 0.38f : 1.0f);
+		pbrMaterial->mNormalStrength = outdoorScene ? 0.82f : 1.0f;
+		pbrMaterial->mSurfaceVariation = outdoorScene ? 0.10f : 0.0f;
 		if (outdoorScene && outdoorIrradianceMap != nullptr &&
 			outdoorPrefilterMap != nullptr) {
 			pbrMaterial->mIrradianceMap = outdoorIrradianceMap;
@@ -404,6 +428,16 @@ void selectShowcase(int index) {
 		environmentMaterial->mDiffuse = outdoorScene && outdoorEnvironmentTexture != nullptr
 			? outdoorEnvironmentTexture
 			: studioEnvironmentTexture;
+		environmentMaterial->mIntensity = outdoorScene ? 0.10f : 1.0f;
+		environmentMaterial->mBlackLevel = outdoorScene ? 0.18f : 0.0f;
+		environmentMaterial->mStarIntensity = outdoorScene ? 2.8f : 0.0f;
+	}
+	if (renderPipeline != nullptr) {
+		PipelineSettings& settings = renderPipeline->settings();
+		settings.exposure = 1.0f;
+		settings.bloomIntensity = outdoorScene ? 0.05f : 0.12f;
+		settings.ssaoRadius = outdoorScene ? 0.82f : 0.55f;
+		settings.ssaoStrength = outdoorScene ? 1.05f : 1.0f;
 	}
 	resetCamera();
 }
@@ -497,6 +531,7 @@ void syncPbrControls() {
 		material->mRoughnessScale = pbrMaterial->mRoughnessScale;
 		material->mAoScale = pbrMaterial->mAoScale;
 		material->mNormalStrength = pbrMaterial->mNormalStrength;
+		material->mSurfaceVariation = pbrMaterial->mSurfaceVariation;
 		material->mDebugView = pbrMaterial->mDebugView;
 		material->mIrradianceMap = pbrMaterial->mIrradianceMap;
 		material->mPrefilterMap = pbrMaterial->mPrefilterMap;
@@ -508,6 +543,7 @@ void syncPbrControls() {
 		material->mMaxReflectionLod = pbrMaterial->mMaxReflectionLod;
 		material->mAoScale = pbrMaterial->mAoScale;
 		material->mNormalStrength = pbrMaterial->mNormalStrength;
+		material->mSurfaceVariation = pbrMaterial->mSurfaceVariation;
 		material->mDebugView = pbrMaterial->mDebugView;
 		material->mIrradianceMap = pbrMaterial->mIrradianceMap;
 		material->mPrefilterMap = pbrMaterial->mPrefilterMap;
@@ -585,7 +621,7 @@ void prepareCamera() {
 		60.0f,
 		static_cast<float>(windowWidth) / static_cast<float>(windowHeight),
 		0.1f,
-		150.0f
+		300.0f
 	);
 	cameraControl = new GameCameraControl();
 	cameraControl->setCamera(camera);
@@ -614,7 +650,7 @@ void prepare() {
 	pbrMaterial->mPrefilterMap = studioPrefilterMap;
 	pbrMaterial->mBrdfLut = Texture::createBrdfLut(512);
 	outdoorEnvironmentTexture = Texture::createExrTexture(
-		"assets/textures/forest_slope_2k.exr"
+		"assets/textures/qwantani_night_puresky_2k.exr"
 	);
 	Texture* outdoorEnvironmentCube = Texture::createEnvironmentCubeMap(
 		outdoorEnvironmentTexture,
@@ -722,34 +758,81 @@ void prepare() {
 		);
 	}
 
-	std::vector<PbrMaterial*> rockMaterials;
-	Object* rockSource = AssimpLoader::load(
-		"assets/models/Rock07/rock_07_1k.gltf",
-		pbrMaterial,
-		3.2f,
-		&rockMaterials
+	struct AsteroidSourceDefinition {
+		const char* path;
+		glm::vec4 color;
+		float metallic;
+		float roughness;
+	};
+	const AsteroidSourceDefinition asteroidSourceDefinitions[] = {
+		{
+			"assets/models/MoonRock01/moon_rock_01_2k.gltf",
+			glm::vec4(0.72f, 0.67f, 0.58f, 1.0f),
+			0.0f,
+			0.88f
+		},
+		{
+			"assets/models/MoonRock02/moon_rock_02_2k.gltf",
+			glm::vec4(0.34f, 0.38f, 0.45f, 1.0f),
+			0.0f,
+			0.98f
+		},
+		{
+			"assets/models/MoonRock06/moon_rock_06_2k.gltf",
+			glm::vec4(0.58f, 0.38f, 0.27f, 1.0f),
+			0.55f,
+			0.62f
+		}
+	};
+	std::vector<Object*> rockSources;
+	Texture* asteroidMetallicMask = Texture::createSolidTexture(
+		"asteroid-metallic-mask",
+		255,
+		255,
+		255
 	);
-	if (rockSource != nullptr) {
+	for (const AsteroidSourceDefinition& definition : asteroidSourceDefinitions) {
+		std::vector<PbrMaterial*> rockMaterials;
+		Object* rockSource = AssimpLoader::load(
+			definition.path,
+			pbrMaterial,
+			3.2f,
+			&rockMaterials
+		);
+		if (rockSource == nullptr) {
+			continue;
+		}
 		centerImportedShowcase(rockSource);
-		pbrMaterials.insert(
-			pbrMaterials.end(),
+		for (PbrMaterial* material : rockMaterials) {
+			material->mMetallicScale = definition.metallic;
+			material->mRoughnessScale = definition.roughness;
+			material->mBaseColorFactor = definition.color;
+			material->mMetallic = asteroidMetallicMask;
+			material->mMetallicChannel = 0;
+			material->mAo = material->mRoughness;
+			material->mAoChannel = 0;
+			asteroidMaterials.push_back(material);
+		}
+		materialMatrixMaterials.insert(
+			materialMatrixMaterials.end(),
 			rockMaterials.begin(),
 			rockMaterials.end()
 		);
+		rockSources.push_back(rockSource);
 	}
-	optimizationShowcase = new OptimizationShowcase(pbrMaterial, rockSource);
+	optimizationShowcase = new OptimizationShowcase(pbrMaterial, rockSources);
 	for (PbrMaterial* material : optimizationShowcase->supplementalMaterials()) {
 		materialMatrixMaterials.push_back(material);
 	}
 	optimizationShowcaseIndex = static_cast<int>(showcases.size());
 	addShowcase(
-		"GPU Rock Field",
-		"Rock 07 by Jenelle van Heerden / Poly Haven CC0",
+		"GPU Asteroid Belt",
+		"Moon Rock 01/02/06 + Moon Meteor 01 + Qwantani Night / Poly Haven CC0",
 		optimizationShowcase->root(),
-		2,
+		5,
 		false,
-		glm::vec3(-9.5f, 8.5f, 42.0f),
-		glm::vec3(0.0f, 1.0f, -10.0f)
+		glm::vec3(8.0f, 15.0f, 92.0f),
+		glm::vec3(-21.0f, -7.0f, -10.0f)
 	);
 
 	selectShowcase(std::min(6, static_cast<int>(showcases.size()) - 1));
@@ -1070,6 +1153,31 @@ void renderImGui() {
 		ImGui::Combo("Lighting View", &pbrMaterial->mDebugView, debugViews, IM_ARRAYSIZE(debugViews));
 		ImGui::SliderFloat("Environment", &pbrMaterial->mEnvIntensity, 0.0f, 5.0f, "%.2f");
 		ImGui::SliderFloat("Reflection LOD", &pbrMaterial->mMaxReflectionLod, 0.0f, 4.0f, "%.2f");
+		if (environmentMaterial != nullptr &&
+			selectedShowcase == optimizationShowcaseIndex) {
+			ImGui::Separator();
+			ImGui::SliderFloat(
+				"Background Intensity",
+				&environmentMaterial->mIntensity,
+				0.0f,
+				1.0f,
+				"%.2f"
+			);
+			ImGui::SliderFloat(
+				"Background Black Level",
+				&environmentMaterial->mBlackLevel,
+				0.0f,
+				0.5f,
+				"%.2f"
+			);
+			ImGui::SliderFloat(
+				"Star Intensity",
+				&environmentMaterial->mStarIntensity,
+				0.0f,
+				5.0f,
+				"%.2f"
+			);
+		}
 	}
 
 	if (pbrMaterial != nullptr && ImGui::CollapsingHeader("Material")) {
@@ -1077,11 +1185,34 @@ void renderImGui() {
 		ImGui::SliderFloat("Roughness", &pbrMaterial->mRoughnessScale, 0.1f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Material AO", &pbrMaterial->mAoScale, 0.0f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Normal Strength", &pbrMaterial->mNormalStrength, 0.0f, 2.0f, "%.2f");
+		ImGui::SliderFloat("Surface Variation", &pbrMaterial->mSurfaceVariation, 0.0f, 1.0f, "%.2f");
+	}
+	if (selectedShowcase == optimizationShowcaseIndex &&
+		!asteroidMaterials.empty() &&
+		ImGui::CollapsingHeader("Asteroid Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
+		const char* materialNames[] = {
+			"Silicate Rock",
+			"Carbonaceous Rock",
+			"Iron Meteorite"
+		};
+		for (std::size_t index = 0; index < asteroidMaterials.size(); ++index) {
+			PbrMaterial* material = asteroidMaterials[index];
+			ImGui::PushID(static_cast<int>(index));
+			ImGui::SeparatorText(
+				index < IM_ARRAYSIZE(materialNames) ? materialNames[index] : "Rock Variant"
+			);
+			ImGui::ColorEdit3("Base Color", &material->mBaseColorFactor.x);
+			ImGui::SliderFloat("Metallic", &material->mMetallicScale, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Roughness", &material->mRoughnessScale, 0.1f, 1.5f, "%.2f");
+			ImGui::PopID();
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Direct Lights")) {
 		ImGui::Checkbox("Enable Direct Lights", &directLightingEnabled);
 		const int count = std::min(static_cast<int>(pointLights.size()), kMaxDemoLights);
+		const float maximumPower =
+			selectedShowcase == optimizationShowcaseIndex ? 500000.0f : 200.0f;
 		for (int i = 0; i < count; ++i) {
 			ImGui::PushID(i);
 			ImGui::Separator();
@@ -1091,7 +1222,7 @@ void renderImGui() {
 				pointLights[i]->setPosition(position);
 			}
 			ImGui::ColorEdit3("Tint", &lightUiTint[i].x);
-			ImGui::SliderFloat("Power", &lightUiPower[i], 0.0f, 200.0f, "%.1f");
+			ImGui::SliderFloat("Power", &lightUiPower[i], 0.0f, maximumPower, "%.0f");
 			ImGui::PopID();
 		}
 	}
@@ -1099,6 +1230,9 @@ void renderImGui() {
 	if (camera != nullptr && cameraControl != nullptr &&
 		ImGui::CollapsingHeader("Camera")) {
 		ImGui::DragFloat3("Camera Position", &camera->mPosition.x, 0.1f);
+		if (PerspectiveCamera* perspective = dynamic_cast<PerspectiveCamera*>(camera)) {
+			ImGui::SliderFloat("Field of View", &perspective->mFovy, 30.0f, 90.0f, "%.0f deg");
+		}
 		if (ImGui::SliderFloat("Move Speed", &cameraMoveSpeed, 0.01f, 1.0f, "%.2f")) {
 			cameraControl->setSpeed(cameraMoveSpeed);
 		}
@@ -1131,6 +1265,7 @@ int main(int argc, char* argv[]) {
 	bool launchDemoLoop = false;
 	bool launchBenchmark = false;
 	bool exitAfterBenchmark = false;
+	bool hideUi = false;
 	int launchShowcase = -1;
 	std::string screenshotPath;
 	for (int i = 1; i < argc; ++i) {
@@ -1139,6 +1274,7 @@ int main(int argc, char* argv[]) {
 		launchDemoLoop = launchDemoLoop || argument == "--demo";
 		launchBenchmark = launchBenchmark || argument == "--benchmark";
 		exitAfterBenchmark = exitAfterBenchmark || argument == "--benchmark-exit";
+		hideUi = hideUi || argument == "--no-ui";
 		launchBenchmark = launchBenchmark || exitAfterBenchmark;
 		const std::string showcasePrefix = "--showcase=";
 		const std::string screenshotPrefix = "--screenshot=";
@@ -1224,17 +1360,15 @@ int main(int argc, char* argv[]) {
 		renderer->mSoftShadowEnabled = renderSoftShadow;
 		if (renderSoftShadow) {
 			const glm::vec3 lightPosition = pointLights[0]->getPosition();
+			const bool outdoorShadow = selectedShowcase == optimizationShowcaseIndex;
 			const glm::mat4 lightView = glm::lookAt(
 				lightPosition,
-				glm::vec3(0.0f, -0.4f, 0.0f),
+				outdoorShadow ? glm::vec3(0.0f, 0.0f, -12.0f) : glm::vec3(0.0f, -0.4f, 0.0f),
 				glm::vec3(0.0f, 1.0f, 0.0f)
 			);
-			const glm::mat4 lightProjection = glm::perspective(
-				glm::radians(50.0f),
-				1.0f,
-				1.0f,
-				30.0f
-			);
+			const glm::mat4 lightProjection = outdoorShadow
+				? glm::ortho(-76.0f, 76.0f, -76.0f, 76.0f, 1.0f, 190.0f)
+				: glm::perspective(glm::radians(50.0f), 1.0f, 1.0f, 30.0f);
 			renderer->mSoftShadowMatrix = lightProjection * lightView;
 			renderer->mSoftShadowLightPosition = lightPosition;
 			renderer->mSoftShadowMap = softShadowFbo->mDepthAttachment;
@@ -1249,9 +1383,11 @@ int main(int argc, char* argv[]) {
 
 		renderer->setClearColor(clearColor);
 		renderPipeline->render(scene, camera, pointLights, pbrMaterial, shadowInput);
-		renderPipeline->beginUiPass();
-		renderImGui();
-		renderPipeline->endUiPass();
+		if (!hideUi) {
+			renderPipeline->beginUiPass();
+			renderImGui();
+			renderPipeline->endUiPass();
+		}
 		renderPipeline->endFrame();
 		optimizationBenchmark.collect(
 			renderPipeline->stats(),

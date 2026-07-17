@@ -5,6 +5,9 @@ in vec3 uvw;
 
 //uniform sampler2D diffuse;
 uniform sampler2D sphericalSampler;
+uniform float environmentIntensity;
+uniform float environmentBlackLevel;
+uniform float starIntensity;
 
 const float PI = 3.1415926535897932384626433832795;
 
@@ -16,9 +19,49 @@ vec2 uvwToUv(vec3 uvwN){
 	return vec2(u, v);
 }
 
+float hash21(vec2 value)
+{
+	value = fract(value * vec2(123.34, 456.21));
+	value += dot(value, value + 45.32);
+	return fract(value.x * value.y);
+}
+
+vec3 proceduralStars(vec2 uv)
+{
+	vec2 gridUv = uv * vec2(1100.0, 550.0);
+	vec2 cell = floor(gridUv);
+	vec2 local = fract(gridUv) - 0.5;
+	vec2 offset = vec2(
+		hash21(cell + vec2(13.0, 7.0)),
+		hash21(cell + vec2(31.0, 19.0))
+	) - 0.5;
+	float seed = hash21(cell + vec2(71.0, 43.0));
+	float exists = step(0.9984, seed);
+	float distanceToStar = length(local - offset * 0.64);
+	float radius = mix(0.08, 0.17, hash21(cell + vec2(5.0, 89.0)));
+	float edge = max(fwidth(distanceToStar) * 1.4, 0.02);
+	float point = 1.0 - smoothstep(radius, radius + edge, distanceToStar);
+	float brightness = 0.9 + 4.2 * pow(
+		hash21(cell + vec2(109.0, 3.0)),
+		6.0
+	);
+	vec3 warm = vec3(1.0, 0.78, 0.58);
+	vec3 cool = vec3(0.58, 0.74, 1.0);
+	vec3 color = mix(
+		warm,
+		cool,
+		hash21(cell + vec2(17.0, 137.0))
+	);
+	return color * point * exists * brightness;
+}
+
 void main()
 {
 	vec3 uvwN = normalize(uvw);
 	vec2 uv = uvwToUv(uvwN);
-	FragColor = texture(sphericalSampler, uv);
+	vec3 environment = texture(sphericalSampler, uv).rgb;
+	environment = max(environment - vec3(environmentBlackLevel), vec3(0.0));
+	environment *= environmentIntensity;
+	environment += proceduralStars(uv) * starIntensity;
+	FragColor = vec4(environment, 1.0);
 }

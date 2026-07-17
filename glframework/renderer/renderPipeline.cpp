@@ -711,6 +711,7 @@ void RenderPipeline::drawGBufferMesh(Mesh* mesh, Camera* camera) {
 	mGBufferShader->setFloat("roughnessScale", material->mRoughnessScale);
 	mGBufferShader->setFloat("aoScale", material->mAoScale);
 	mGBufferShader->setFloat("normalStrength", material->mNormalStrength);
+	mGBufferShader->setFloat("surfaceVariation", material->mSurfaceVariation);
 	mGBufferShader->setFloat("opacity", material->mOpacity * material->mBaseColorFactor.a);
 	mGBufferShader->setInt("metallicChannel", material->mMetallicChannel);
 	mGBufferShader->setInt("roughnessChannel", material->mRoughnessChannel);

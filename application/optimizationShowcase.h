@@ -9,7 +9,10 @@
 
 class OptimizationShowcase {
 public:
-	OptimizationShowcase(PbrMaterial* environmentMaterial, Object* sourceRock);
+	OptimizationShowcase(
+		PbrMaterial* environmentMaterial,
+		const std::vector<Object*>& sourceRocks
+	);
 
 	Object* root() const { return mRoot; }
 	int objectCount() const { return static_cast<int>(mPlacements.size()); }
@@ -30,6 +33,12 @@ private:
 		PbrMaterial* material{ nullptr };
 		glm::mat4 localMatrix{ 1.0f };
 		InstancedMesh* instancedMesh{ nullptr };
+		std::size_t variantIndex{ 0 };
+	};
+
+	struct Placement {
+		glm::mat4 matrix{ 1.0f };
+		std::size_t variantIndex{ 0 };
 	};
 
 	PbrMaterial* createMaterial(
@@ -39,7 +48,7 @@ private:
 		float metallic,
 		float roughness
 	);
-	void collectSourceComponents(Object* object);
+	void collectSourceComponents(Object* object, std::size_t variantIndex);
 	void calculateSourceBounds();
 	glm::mat4 createProxyMatrix(
 		const glm::mat4& placement,
@@ -51,11 +60,12 @@ private:
 	Object* mInstancedRoot{ nullptr };
 	std::vector<SourceComponent> mSourceComponents;
 	std::vector<PbrMaterial*> mSupplementalMaterials;
-	std::vector<glm::mat4> mPlacements;
+	std::vector<Placement> mPlacements;
+	std::size_t mVariantCount{ 1 };
 	glm::vec3 mSourceMinimum{ -0.5f };
 	glm::vec3 mSourceMaximum{ 0.5f };
 	Geometry* mMediumGeometry{ nullptr };
 	Geometry* mLowGeometry{ nullptr };
-	InstancedMesh* mMediumProxy{ nullptr };
-	InstancedMesh* mLowProxy{ nullptr };
+	std::vector<InstancedMesh*> mMediumProxies;
+	std::vector<InstancedMesh*> mLowProxies;
 };
