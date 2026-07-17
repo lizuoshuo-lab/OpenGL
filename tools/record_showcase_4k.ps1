@@ -97,7 +97,7 @@ try {
                 break
             }
 
-            $window = [OpenGLCapture.WindowProbe]::FindWindow("GLFW30", "OpenGL IBL Showcase")
+            $window = [OpenGLCapture.WindowProbe]::FindWindow("GLFW30", "OpenGL Renderer")
             if ($window -eq [IntPtr]::Zero) {
                 continue
             }
