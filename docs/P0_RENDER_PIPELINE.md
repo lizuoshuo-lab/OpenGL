@@ -51,7 +51,9 @@ ImGui 的 `Output Buffer` 可以全屏查看 World Position、World Normal、Alb
 
 ## Asteroid Belt 优化
 
-展示场景使用 Poly Haven 的 Moon Rock 01、02、06 三套 2K glTF 月岩，构成 2500 颗确定性分布的小行星带。三组材质分别表现硅酸盐、碳质岩和金属陨石；中心行星使用 Moon Meteor 01 的 Albedo、Normal、Roughness 与 AO，外层透明大气在 Forward Pass 合成。Medium/Low 两级程序化代理保留各自材质分组，Reference 与 Optimized 使用相同场景和相机。
+展示场景使用 Poly Haven 的 Moon Rock 01、02、06 三套 2K glTF 月岩，构成 2500 颗确定性分布的小行星带。三组材质分别表现硅酸盐、碳质岩和金属陨石。中心行星使用 USGS/NASA Viking 全球拼接图作为 4K Albedo，并保持 Metallic 为 0、Roughness 为 1；场景不再添加透明大气球，因此没有额外外圈。可见天空使用 ESO/S. Brunier 的 6000 x 3000 全天银河全景，PBR 的 Irradiance 与 GGX Prefilter 仍由 Qwantani Night EXR 生成。
+
+行星、单颗小行星和带状轨道分别使用三层变换：中心行星绕自身轴旋转，每颗小行星保留独立随机旋转轴，Reference 与 Instanced 两棵场景树共享同一公转父矩阵。基准采样期间冻结动画，确保两个模式比较同一姿态。Medium/Low 两级程序化代理保留各自材质分组，Reference 与 Optimized 使用相同场景和相机。
 
 | 模式 | Frustum Culling | GPU Instancing | LOD |
 | --- | --- | --- | --- |
@@ -66,10 +68,10 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 
 | 指标 | Reference | Optimized | 降幅 |
 | --- | ---: | ---: | ---: |
-| CPU Frame | 175.311 ms | 12.249 ms | 93.01% |
-| GPU Frame | 65.955 ms | 0.413 ms | 99.37% |
-| Draw Calls | 4,958 | 28 | 99.44% |
-| Triangles | 23,860,254 | 2,078,490 | 91.29% |
+| CPU Frame | 216.240 ms | 13.523 ms | 93.75% |
+| GPU Frame | 83.178 ms | 0.463 ms | 99.44% |
+| Draw Calls | 5,194 | 27 | 99.48% |
+| Triangles | 24,784,634 | 1,960,094 | 92.09% |
 
 ## 操作入口
 
@@ -77,7 +79,8 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 2. 在 `Render Pipeline` 切换 Deferred/Forward、GBuffer、SSAO、Bloom、Tone Mapper、Culling、Instancing、LOD 和 AABB。
 3. 在 `Performance` 查看整帧与各 Pass 数据。
 4. 在 `Optimization A/B` 点击 `Run Reference vs Optimized`，程序会自动完成两组预热和采样。
-5. 在 `Asteroid Materials` 分别调整三类小行星的 Base Color、Metallic 与 Roughness。
+5. 在 `Orbital Motion` 控制小行星带公转、行星自转、单颗小行星自转倍率与运动重置。
+6. 在 `Geological Planet` 调整行星 Tint、Roughness 与 Terrain Relief，在 `Asteroid Materials` 分别调整三类小行星的 Base Color、Metallic 与 Roughness。
 
 命令行也可无人值守执行：
 
@@ -94,5 +97,7 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 - [Moon Rock 01](https://polyhaven.com/a/moon_rock_01)，Poly Haven，CC0。
 - [Moon Rock 02](https://polyhaven.com/a/moon_rock_02)，Poly Haven，CC0。
 - [Moon Rock 06](https://polyhaven.com/a/moon_rock_06)，Poly Haven，CC0。
-- [Moon Meteor 01](https://polyhaven.com/a/moon_meteor_01)，Poly Haven，CC0。
-- [Qwantani Night Pure Sky](https://polyhaven.com/a/qwantani_night_puresky)，Poly Haven，CC0。
+- [Moon Meteor 01](https://polyhaven.com/a/moon_meteor_01)，行星微表面 Normal，Poly Haven，CC0。
+- [Qwantani Night Pure Sky](https://polyhaven.com/a/qwantani_night_puresky)，IBL HDR 输入，Poly Haven，CC0。
+- [Mars Viking Colorized Global Mosaic](https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m)，USGS Astrogeology / NASA Ames，Public domain。
+- [The Milky Way panorama](https://www.eso.org/public/images/eso0932a/)，ESO/S. Brunier，[CC BY 4.0](https://www.eso.org/public/outreach/copyright/)。

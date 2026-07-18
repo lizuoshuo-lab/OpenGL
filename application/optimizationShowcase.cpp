@@ -146,62 +146,42 @@ OptimizationShowcase::OptimizationShowcase(
 	}
 	calculateSourceBounds();
 
-	const glm::vec3 planetCenter(-5.0f, -7.0f, -6.0f);
-	PbrMaterial* planetMaterial = createMaterial(
+	mPlanetMaterial = createMaterial(
 		environmentMaterial,
-		"optimization-rock-planet",
-		glm::ivec4(148, 162, 175, 255),
+		"optimization-geological-planet",
+		glm::ivec4(170, 105, 72, 255),
 		0.0f,
-		0.82f
+		1.0f
 	);
-	planetMaterial->mAlbedo = Texture::createTexture(
-		"assets/textures/MoonMeteor01/moon_meteor_01_diff_2k.jpg",
+	mPlanetMaterial->mAlbedo = Texture::createTexture(
+		"assets/textures/mars_viking_mdim21_color_4k.jpg",
 		0
 	);
-	planetMaterial->mNormal = Texture::createTexture(
+	mPlanetMaterial->mNormal = Texture::createTexture(
 		"assets/textures/MoonMeteor01/moon_meteor_01_nor_gl_2k.jpg",
 		1
 	);
-	planetMaterial->mRoughness = Texture::createTexture(
-		"assets/textures/MoonMeteor01/moon_meteor_01_rough_2k.jpg",
-		2
-	);
-	planetMaterial->mAo = Texture::createTexture(
-		"assets/textures/MoonMeteor01/moon_meteor_01_ao_2k.jpg",
-		3
-	);
-	planetMaterial->mBaseColorFactor = glm::vec4(0.68f, 0.72f, 0.78f, 1.0f);
-	planetMaterial->mAoChannel = 0;
-	planetMaterial->mFaceCulling = true;
+	mPlanetMaterial->mBaseColorFactor = glm::vec4(1.0f, 0.82f, 0.68f, 1.0f);
+	mPlanetMaterial->mMetallicScale = 0.0f;
+	mPlanetMaterial->mRoughnessScale = 1.0f;
+	mPlanetMaterial->mNormalStrength = 0.38f;
+	mPlanetMaterial->mSurfaceVariation = 0.0f;
+	mPlanetMaterial->mFaceCulling = true;
 
-	Mesh* planet = new Mesh(Geometry::createSphere(18.0f, 96, 128), planetMaterial);
-	planet->setPosition(planetCenter);
-	planet->setAngleY(-24.0f);
-	mRoot->addChild(planet);
-
-	PbrMaterial* atmosphereMaterial = createMaterial(
-		environmentMaterial,
-		"optimization-atmosphere",
-		glm::ivec4(92, 154, 224, 255),
-		0.0f,
-		0.18f
+	mPlanet = new Mesh(
+		Geometry::createSphere(18.0f, 128, 192),
+		mPlanetMaterial
 	);
-	atmosphereMaterial->mBaseColorFactor = glm::vec4(0.34f, 0.62f, 1.0f, 0.10f);
-	atmosphereMaterial->mOpacity = 0.10f;
-	atmosphereMaterial->mBlend = true;
-	atmosphereMaterial->mDepthWrite = false;
-	atmosphereMaterial->mFaceCulling = true;
-	Mesh* atmosphere = new Mesh(
-		Geometry::createSphere(18.55f, 72, 96),
-		atmosphereMaterial
-	);
-	atmosphere->setPosition(planetCenter);
-	mRoot->addChild(atmosphere);
+	mPlanet->setPosition(mPlanetCenter);
+	mPlanet->setAngleY(mPlanetSpinAngle);
+	mPlanet->setAngleZ(11.5f);
+	mRoot->addChild(mPlanet);
 
 	constexpr std::size_t asteroidCount = 2500;
 	std::mt19937 random(20260717u);
 	std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 	std::uniform_real_distribution<float> angle(0.0f, 360.0f);
+	std::uniform_real_distribution<float> signedUnit(-1.0f, 1.0f);
 	std::uniform_real_distribution<float> angleJitter(-0.012f, 0.012f);
 	std::normal_distribution<float> radialNoise(0.0f, 7.5f);
 	std::normal_distribution<float> verticalNoise(0.0f, 2.8f);
@@ -220,31 +200,53 @@ OptimizationShowcase::OptimizationShowcase(
 		const glm::vec3& rotation, const glm::vec3& stretch,
 		std::size_t variantIndex) {
 		variantIndex %= mVariantCount;
-		glm::mat4 placement = glm::translate(glm::mat4(1.0f), position);
-		placement = glm::rotate(
-			placement,
+		glm::mat4 baseTransform = glm::translate(glm::mat4(1.0f), position);
+		baseTransform = glm::rotate(
+			baseTransform,
 			glm::radians(rotation.x),
 			glm::vec3(1.0f, 0.0f, 0.0f)
 		);
-		placement = glm::rotate(
-			placement,
+		baseTransform = glm::rotate(
+			baseTransform,
 			glm::radians(rotation.y),
 			glm::vec3(0.0f, 1.0f, 0.0f)
 		);
-		placement = glm::rotate(
-			placement,
+		baseTransform = glm::rotate(
+			baseTransform,
 			glm::radians(rotation.z),
 			glm::vec3(0.0f, 0.0f, 1.0f)
 		);
-		placement = glm::scale(placement, scale * stretch);
-		mPlacements.push_back({ placement, variantIndex });
+		const glm::vec3 placementScale = scale * stretch;
+		const glm::mat4 placement = glm::scale(baseTransform, placementScale);
+		glm::vec3 spinAxis(signedUnit(random), signedUnit(random), signedUnit(random));
+		if (glm::length(spinAxis) < 0.001f) {
+			spinAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+		}
+		else {
+			spinAxis = glm::normalize(spinAxis);
+		}
+		const float spinDirection = unit(random) < 0.5f ? -1.0f : 1.0f;
+		const float spinSpeed = spinDirection * (4.0f + unit(random) * 22.0f);
+		Object* referenceObject = new Object();
+		referenceObject->setLocalMatrix(placement);
+		mReferenceRoot->addChild(referenceObject);
+		mPlacements.push_back({
+			placement,
+			baseTransform,
+			placementScale,
+			spinAxis,
+			spinSpeed,
+			0.0f,
+			referenceObject,
+			variantIndex
+		});
 		for (const SourceComponent& component : mSourceComponents) {
 			if (component.variantIndex != variantIndex) {
 				continue;
 			}
 			Mesh* mesh = new Mesh(component.geometry, component.material);
-			mesh->setLocalMatrix(placement * component.localMatrix);
-			mReferenceRoot->addChild(mesh);
+			mesh->setLocalMatrix(component.localMatrix);
+			referenceObject->addChild(mesh);
 		}
 	};
 
@@ -288,7 +290,7 @@ OptimizationShowcase::OptimizationShowcase(
 			verticalNoise(random),
 			std::sin(theta) * radius
 		);
-		const glm::vec3 position = planetCenter + glm::vec3(
+		const glm::vec3 position = mPlanetCenter + glm::vec3(
 			ringTilt * glm::vec4(localPosition, 1.0f)
 		);
 		const float sizeRoll = unit(random);
@@ -299,7 +301,7 @@ OptimizationShowcase::OptimizationShowcase(
 		else if (sizeRoll < 0.20f) {
 			scale = 0.36f + unit(random) * 0.38f;
 		}
-		if (position.z > planetCenter.z + 20.0f) {
+		if (position.z > mPlanetCenter.z + 20.0f) {
 			scale *= 1.12f;
 		}
 		addAsteroid(
@@ -329,7 +331,7 @@ OptimizationShowcase::OptimizationShowcase(
 	mMediumProxies.reserve(mVariantCount);
 	mLowProxies.reserve(mVariantCount);
 	for (std::size_t variantIndex = 0; variantIndex < mVariantCount; ++variantIndex) {
-		PbrMaterial* variantMaterial = planetMaterial;
+		PbrMaterial* variantMaterial = mPlanetMaterial;
 		for (const SourceComponent& component : mSourceComponents) {
 			if (component.variantIndex == variantIndex) {
 				variantMaterial = component.material;
@@ -358,6 +360,71 @@ OptimizationShowcase::OptimizationShowcase(
 	update(nullptr, true, false, false);
 }
 
+void OptimizationShowcase::animate(
+	float deltaTime,
+	bool motionEnabled,
+	float orbitSpeed,
+	float planetSpinSpeed,
+	float asteroidSpinScale
+) {
+	if (!motionEnabled || deltaTime <= 0.0f) {
+		return;
+	}
+
+	mOrbitAngle = std::fmod(mOrbitAngle + orbitSpeed * deltaTime, 360.0f);
+	mPlanetSpinAngle = std::fmod(
+		mPlanetSpinAngle + planetSpinSpeed * deltaTime,
+		360.0f
+	);
+	if (mPlanet != nullptr) {
+		mPlanet->setAngleY(mPlanetSpinAngle);
+	}
+
+	glm::mat4 orbitMatrix = glm::translate(glm::mat4(1.0f), mPlanetCenter);
+	orbitMatrix = glm::rotate(
+		orbitMatrix,
+		glm::radians(mOrbitAngle),
+		glm::vec3(0.0f, 1.0f, 0.0f)
+	);
+	orbitMatrix = glm::translate(orbitMatrix, -mPlanetCenter);
+	mReferenceRoot->setLocalMatrix(orbitMatrix);
+	mInstancedRoot->setLocalMatrix(orbitMatrix);
+
+	for (Placement& placement : mPlacements) {
+		placement.spinAngle = std::fmod(
+			placement.spinAngle +
+				placement.spinSpeed * asteroidSpinScale * deltaTime,
+			360.0f
+		);
+		placement.matrix = glm::rotate(
+			placement.baseTransform,
+			glm::radians(placement.spinAngle),
+			placement.spinAxis
+		);
+		placement.matrix = glm::scale(placement.matrix, placement.scale);
+		if (placement.referenceObject != nullptr) {
+			placement.referenceObject->setLocalMatrix(placement.matrix);
+		}
+	}
+}
+
+void OptimizationShowcase::resetMotion() {
+	mOrbitAngle = 0.0f;
+	mPlanetSpinAngle = -24.0f;
+	if (mPlanet != nullptr) {
+		mPlanet->setAngleY(mPlanetSpinAngle);
+	}
+	mReferenceRoot->setLocalMatrix(glm::mat4(1.0f));
+	mInstancedRoot->setLocalMatrix(glm::mat4(1.0f));
+	for (Placement& placement : mPlacements) {
+		placement.spinAngle = 0.0f;
+		placement.matrix = glm::scale(placement.baseTransform, placement.scale);
+		if (placement.referenceObject != nullptr) {
+			placement.referenceObject->setLocalMatrix(placement.matrix);
+		}
+	}
+}
+
 void OptimizationShowcase::update(
 	Camera* camera,
 	bool instancingEnabled,
@@ -380,7 +447,7 @@ void OptimizationShowcase::update(
 	if (camera != nullptr) {
 		frustum.update(camera->getProjectionMatrix() * camera->getViewMatrix());
 	}
-	const glm::mat4 rootMatrix = mRoot->getModelMatrix();
+	const glm::mat4 rootMatrix = mInstancedRoot->getModelMatrix();
 	const glm::vec3 sourceCenter = (mSourceMinimum + mSourceMaximum) * 0.5f;
 	for (const Placement& placement : mPlacements) {
 		const glm::mat4 worldMatrix = rootMatrix * placement.matrix;

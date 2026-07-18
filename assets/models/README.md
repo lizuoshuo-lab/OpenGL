@@ -19,4 +19,4 @@ Flight Helmet and Toy Car are dedicated to the public domain under [CC0 1.0](htt
 
 Toy Car and A Beautiful Game include optional glTF material extensions. This renderer currently displays their core metallic-roughness PBR data; clearcoat, sheen, transmission, and volume remain explicit extension work rather than silently claimed support.
 
-The GPU Asteroid Belt combines Moon Rock 01, 02, and 06 as three instanced PBR batches. Its planet uses [Moon Meteor 01](https://polyhaven.com/a/moon_meteor_01), while [Qwantani Night Pure Sky](https://polyhaven.com/a/qwantani_night_puresky) supplies the EXR environment. These Poly Haven assets are published under CC0.
+The GPU Asteroid Belt combines Moon Rock 01, 02, and 06 as three instanced PBR batches. [Moon Meteor 01](https://polyhaven.com/a/moon_meteor_01) supplies subtle normal detail for the geological planet, while [Qwantani Night Pure Sky](https://polyhaven.com/a/qwantani_night_puresky) supplies the EXR input used for IBL precomputation. These Poly Haven assets are published under CC0. The planet albedo and visible sky have separate attributions in [`assets/textures/README.md`](../textures/README.md).

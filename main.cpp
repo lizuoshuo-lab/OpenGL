@@ -44,6 +44,7 @@ Texture* studioPrefilterMap = nullptr;
 Texture* outdoorEnvironmentTexture = nullptr;
 Texture* outdoorIrradianceMap = nullptr;
 Texture* outdoorPrefilterMap = nullptr;
+Texture* spaceBackgroundTexture = nullptr;
 
 std::vector<PbrMaterial*> pbrMaterials;
 std::vector<PbrMaterial*> materialMatrixMaterials;
@@ -68,6 +69,10 @@ bool autoRotateShowcase = true;
 float showcaseRotation = 0.0f;
 float showcaseScale = 1.0f;
 float showcaseRotationSpeed = 18.0f;
+bool orbitalMotionEnabled = true;
+float asteroidOrbitSpeed = 3.5f;
+float planetSpinSpeed = 5.0f;
+float asteroidSpinScale = 1.0f;
 bool demoLoopEnabled = false;
 double demoLoopStartTime = 0.0;
 double demoLoopElapsed = 0.0;
@@ -425,12 +430,12 @@ void selectShowcase(int index) {
 		}
 	}
 	if (environmentMaterial != nullptr) {
-		environmentMaterial->mDiffuse = outdoorScene && outdoorEnvironmentTexture != nullptr
-			? outdoorEnvironmentTexture
+		environmentMaterial->mDiffuse = outdoorScene && spaceBackgroundTexture != nullptr
+			? spaceBackgroundTexture
 			: studioEnvironmentTexture;
-		environmentMaterial->mIntensity = outdoorScene ? 0.10f : 1.0f;
-		environmentMaterial->mBlackLevel = outdoorScene ? 0.18f : 0.0f;
-		environmentMaterial->mStarIntensity = outdoorScene ? 2.8f : 0.0f;
+		environmentMaterial->mIntensity = outdoorScene ? 0.40f : 1.0f;
+		environmentMaterial->mBlackLevel = outdoorScene ? 0.01f : 0.0f;
+		environmentMaterial->mStarIntensity = 0.0f;
 	}
 	if (renderPipeline != nullptr) {
 		PipelineSettings& settings = renderPipeline->settings();
@@ -539,11 +544,17 @@ void syncPbrControls() {
 	}
 
 	for (PbrMaterial* material : materialMatrixMaterials) {
-		material->mEnvIntensity = pbrMaterial->mEnvIntensity;
+		const bool geologicalPlanet = optimizationShowcase != nullptr &&
+			material == optimizationShowcase->planetMaterial();
+		material->mEnvIntensity = geologicalPlanet
+			? pbrMaterial->mEnvIntensity * 1.45f
+			: pbrMaterial->mEnvIntensity;
 		material->mMaxReflectionLod = pbrMaterial->mMaxReflectionLod;
 		material->mAoScale = pbrMaterial->mAoScale;
-		material->mNormalStrength = pbrMaterial->mNormalStrength;
-		material->mSurfaceVariation = pbrMaterial->mSurfaceVariation;
+		if (!geologicalPlanet) {
+			material->mNormalStrength = pbrMaterial->mNormalStrength;
+			material->mSurfaceVariation = pbrMaterial->mSurfaceVariation;
+		}
 		material->mDebugView = pbrMaterial->mDebugView;
 		material->mIrradianceMap = pbrMaterial->mIrradianceMap;
 		material->mPrefilterMap = pbrMaterial->mPrefilterMap;
@@ -658,6 +669,10 @@ void prepare() {
 	);
 	outdoorIrradianceMap = Texture::createIrradianceCubeMap(outdoorEnvironmentCube, 32);
 	outdoorPrefilterMap = Texture::createPrefilterCubeMap(outdoorEnvironmentCube, 128, 5);
+	spaceBackgroundTexture = Texture::createTexture(
+		"assets/textures/eso_milky_way_360_6k.jpg",
+		0
+	);
 	delete studioEnvironmentCube;
 	delete outdoorEnvironmentCube;
 
@@ -827,9 +842,9 @@ void prepare() {
 	optimizationShowcaseIndex = static_cast<int>(showcases.size());
 	addShowcase(
 		"GPU Asteroid Belt",
-		"Moon Rock 01/02/06 + Moon Meteor 01 + Qwantani Night / Poly Haven CC0",
+		"Moon rocks + Qwantani IBL / Poly Haven CC0; Mars / USGS-NASA; Milky Way / ESO-S. Brunier",
 		optimizationShowcase->root(),
-		5,
+		4,
 		false,
 		glm::vec3(8.0f, 15.0f, 92.0f),
 		glm::vec3(-21.0f, -7.0f, -10.0f)
@@ -1105,7 +1120,9 @@ void renderImGui() {
 		}
 
 		const ShowcaseEntry& showcase = showcases[selectedShowcase];
+		ImGui::PushTextWrapPos();
 		ImGui::TextDisabled("%s", showcase.attribution.c_str());
+		ImGui::PopTextWrapPos();
 		ImGui::Text("Meshes %d   Materials %d", showcase.meshCount, showcase.materialCount);
 		ImGui::Checkbox("Auto Rotate", &autoRotateShowcase);
 		ImGui::SliderFloat("Rotation Speed", &showcaseRotationSpeed, 0.0f, 60.0f, "%.0f deg/s");
@@ -1120,7 +1137,40 @@ void renderImGui() {
 			showcaseScale = 1.0f;
 			showcase.object->setAngleY(0.0f);
 			showcase.object->setScale(glm::vec3(1.0f));
+			if (selectedShowcase == optimizationShowcaseIndex &&
+				optimizationShowcase != nullptr) {
+				optimizationShowcase->resetMotion();
+			}
 			resetCamera();
+		}
+		if (selectedShowcase == optimizationShowcaseIndex &&
+			optimizationShowcase != nullptr) {
+			ImGui::SeparatorText("Orbital Motion");
+			ImGui::Checkbox("Enable Motion", &orbitalMotionEnabled);
+			ImGui::SliderFloat(
+				"Belt Orbit",
+				&asteroidOrbitSpeed,
+				-12.0f,
+				12.0f,
+				"%.1f deg/s"
+			);
+			ImGui::SliderFloat(
+				"Planet Spin",
+				&planetSpinSpeed,
+				-30.0f,
+				30.0f,
+				"%.1f deg/s"
+			);
+			ImGui::SliderFloat(
+				"Asteroid Spin",
+				&asteroidSpinScale,
+				0.0f,
+				4.0f,
+				"%.2fx"
+			);
+			if (ImGui::Button("Reset Motion")) {
+				optimizationShowcase->resetMotion();
+			}
 		}
 		if (showcase.supportsSoftShadow) {
 			ImGui::Separator();
@@ -1186,6 +1236,27 @@ void renderImGui() {
 		ImGui::SliderFloat("Material AO", &pbrMaterial->mAoScale, 0.0f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Normal Strength", &pbrMaterial->mNormalStrength, 0.0f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Surface Variation", &pbrMaterial->mSurfaceVariation, 0.0f, 1.0f, "%.2f");
+	}
+	if (selectedShowcase == optimizationShowcaseIndex &&
+		optimizationShowcase != nullptr &&
+		optimizationShowcase->planetMaterial() != nullptr &&
+		ImGui::CollapsingHeader("Geological Planet", ImGuiTreeNodeFlags_DefaultOpen)) {
+		PbrMaterial* planetMaterial = optimizationShowcase->planetMaterial();
+		ImGui::ColorEdit3("Planet Tint", &planetMaterial->mBaseColorFactor.x);
+		ImGui::SliderFloat(
+			"Planet Roughness",
+			&planetMaterial->mRoughnessScale,
+			0.7f,
+			1.3f,
+			"%.2f"
+		);
+		ImGui::SliderFloat(
+			"Terrain Relief",
+			&planetMaterial->mNormalStrength,
+			0.0f,
+			1.0f,
+			"%.2f"
+		);
 	}
 	if (selectedShowcase == optimizationShowcaseIndex &&
 		!asteroidMaterials.empty() &&
@@ -1341,6 +1412,13 @@ int main(int argc, char* argv[]) {
 
 		if (optimizationShowcase != nullptr &&
 			optimizationShowcase->root()->isVisible()) {
+			optimizationShowcase->animate(
+				deltaTime,
+				orbitalMotionEnabled && !optimizationBenchmark.running(),
+				asteroidOrbitSpeed,
+				planetSpinSpeed,
+				asteroidSpinScale
+			);
 			const PipelineSettings& settings = renderPipeline->settings();
 			optimizationShowcase->update(
 				camera,
