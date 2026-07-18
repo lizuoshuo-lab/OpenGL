@@ -28,7 +28,7 @@ float hash21(vec2 value)
 
 vec3 proceduralStars(vec2 uv)
 {
-	vec2 gridUv = uv * vec2(1100.0, 550.0);
+	vec2 gridUv = uv * vec2(1150.0, 575.0);
 	vec2 cell = floor(gridUv);
 	vec2 local = fract(gridUv) - 0.5;
 	vec2 offset = vec2(
@@ -36,22 +36,23 @@ vec3 proceduralStars(vec2 uv)
 		hash21(cell + vec2(31.0, 19.0))
 	) - 0.5;
 	float seed = hash21(cell + vec2(71.0, 43.0));
-	float exists = step(0.9984, seed);
+	float exists = step(0.9935, seed);
 	float distanceToStar = length(local - offset * 0.64);
-	float radius = mix(0.08, 0.17, hash21(cell + vec2(5.0, 89.0)));
-	float edge = max(fwidth(distanceToStar) * 1.4, 0.02);
+	float sizeSeed = hash21(cell + vec2(5.0, 89.0));
+	float radius = mix(0.035, 0.105, pow(sizeSeed, 3.0));
+	float edge = max(fwidth(distanceToStar) * 1.15, 0.012);
 	float point = 1.0 - smoothstep(radius, radius + edge, distanceToStar);
-	float brightness = 0.9 + 4.2 * pow(
+	float brightness = 0.35 + 1.15 * pow(
 		hash21(cell + vec2(109.0, 3.0)),
-		6.0
+		3.0
 	);
-	vec3 warm = vec3(1.0, 0.78, 0.58);
-	vec3 cool = vec3(0.58, 0.74, 1.0);
-	vec3 color = mix(
-		warm,
-		cool,
-		hash21(cell + vec2(17.0, 137.0))
-	);
+	float temperature = hash21(cell + vec2(17.0, 137.0));
+	vec3 warm = vec3(1.0, 0.76, 0.58);
+	vec3 neutral = vec3(0.92, 0.95, 1.0);
+	vec3 cool = vec3(0.62, 0.77, 1.0);
+	vec3 color = temperature < 0.22
+		? mix(warm, neutral, temperature / 0.22)
+		: mix(neutral, cool, (temperature - 0.22) / 0.78);
 	return color * point * exists * brightness;
 }
 

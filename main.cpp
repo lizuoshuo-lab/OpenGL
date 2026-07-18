@@ -44,7 +44,7 @@ Texture* studioPrefilterMap = nullptr;
 Texture* outdoorEnvironmentTexture = nullptr;
 Texture* outdoorIrradianceMap = nullptr;
 Texture* outdoorPrefilterMap = nullptr;
-Texture* spaceBackgroundTexture = nullptr;
+Texture* starfieldBackgroundTexture = nullptr;
 
 std::vector<PbrMaterial*> pbrMaterials;
 std::vector<PbrMaterial*> materialMatrixMaterials;
@@ -73,6 +73,12 @@ bool orbitalMotionEnabled = true;
 float asteroidOrbitSpeed = 3.5f;
 float planetSpinSpeed = 5.0f;
 float asteroidSpinScale = 1.0f;
+bool cameraOrbitEnabled = true;
+float cameraOrbitSpeed = 1.8f;
+float cameraOrbitAngle = 82.45f;
+float cameraOrbitRadius = 98.86f;
+float cameraOrbitHeight = 22.0f;
+const glm::vec3 optimizationCameraCenter(-5.0f, -7.0f, -6.0f);
 bool demoLoopEnabled = false;
 double demoLoopStartTime = 0.0;
 double demoLoopElapsed = 0.0;
@@ -285,16 +291,9 @@ double reductionPercent(double reference, double optimized) {
 	return reference > 0.0 ? (reference - optimized) * 100.0 / reference : 0.0;
 }
 
-void resetCamera() {
+void setCameraPose(const glm::vec3& position, const glm::vec3& target) {
 	if (camera == nullptr) {
 		return;
-	}
-
-	glm::vec3 position(0.0f, 0.0f, 8.0f);
-	glm::vec3 target(0.0f);
-	if (!showcases.empty()) {
-		position = showcases[selectedShowcase].cameraPosition;
-		target = showcases[selectedShowcase].cameraTarget;
 	}
 
 	const glm::vec3 front = glm::normalize(target - position);
@@ -309,6 +308,45 @@ void resetCamera() {
 	camera->mPosition = position;
 	camera->mRight = right;
 	camera->mUp = glm::normalize(glm::cross(right, front));
+}
+
+void resetCamera() {
+	if (camera == nullptr) {
+		return;
+	}
+
+	glm::vec3 position(0.0f, 0.0f, 8.0f);
+	glm::vec3 target(0.0f);
+	if (!showcases.empty()) {
+		position = showcases[selectedShowcase].cameraPosition;
+		target = showcases[selectedShowcase].cameraTarget;
+	}
+
+	setCameraPose(position, target);
+	if (selectedShowcase == optimizationShowcaseIndex) {
+		const glm::vec3 offset = position - optimizationCameraCenter;
+		cameraOrbitRadius = glm::length(glm::vec2(offset.x, offset.z));
+		cameraOrbitHeight = offset.y;
+		cameraOrbitAngle = glm::degrees(std::atan2(offset.z, offset.x));
+	}
+}
+
+void updateCameraOrbit(float deltaTime) {
+	if (camera == nullptr || deltaTime <= 0.0f) {
+		return;
+	}
+
+	cameraOrbitAngle = std::fmod(
+		cameraOrbitAngle + cameraOrbitSpeed * deltaTime,
+		360.0f
+	);
+	const float angleRadians = glm::radians(cameraOrbitAngle);
+	const glm::vec3 position = optimizationCameraCenter + glm::vec3(
+		std::cos(angleRadians) * cameraOrbitRadius,
+		cameraOrbitHeight,
+		std::sin(angleRadians) * cameraOrbitRadius
+	);
+	setCameraPose(position, optimizationCameraCenter);
 }
 
 int countMeshes(Object* object) {
@@ -430,12 +468,12 @@ void selectShowcase(int index) {
 		}
 	}
 	if (environmentMaterial != nullptr) {
-		environmentMaterial->mDiffuse = outdoorScene && spaceBackgroundTexture != nullptr
-			? spaceBackgroundTexture
+		environmentMaterial->mDiffuse = outdoorScene && starfieldBackgroundTexture != nullptr
+			? starfieldBackgroundTexture
 			: studioEnvironmentTexture;
-		environmentMaterial->mIntensity = outdoorScene ? 0.40f : 1.0f;
-		environmentMaterial->mBlackLevel = outdoorScene ? 0.01f : 0.0f;
-		environmentMaterial->mStarIntensity = 0.0f;
+		environmentMaterial->mIntensity = 1.0f;
+		environmentMaterial->mBlackLevel = 0.0f;
+		environmentMaterial->mStarIntensity = outdoorScene ? 0.78f : 0.0f;
 	}
 	if (renderPipeline != nullptr) {
 		PipelineSettings& settings = renderPipeline->settings();
@@ -669,9 +707,13 @@ void prepare() {
 	);
 	outdoorIrradianceMap = Texture::createIrradianceCubeMap(outdoorEnvironmentCube, 32);
 	outdoorPrefilterMap = Texture::createPrefilterCubeMap(outdoorEnvironmentCube, 128, 5);
-	spaceBackgroundTexture = Texture::createTexture(
-		"assets/textures/eso_milky_way_360_6k.jpg",
-		0
+	starfieldBackgroundTexture = Texture::createSolidTexture(
+		"deep-space-starfield",
+		0,
+		0,
+		2,
+		255,
+		GL_SRGB_ALPHA
 	);
 	delete studioEnvironmentCube;
 	delete outdoorEnvironmentCube;
@@ -842,12 +884,12 @@ void prepare() {
 	optimizationShowcaseIndex = static_cast<int>(showcases.size());
 	addShowcase(
 		"GPU Asteroid Belt",
-		"Moon rocks + Qwantani IBL / Poly Haven CC0; Mars / USGS-NASA; Milky Way / ESO-S. Brunier",
+		"Moon rocks + Qwantani IBL / Poly Haven CC0; Mars / USGS-NASA; procedural deep-space starfield",
 		optimizationShowcase->root(),
 		4,
 		false,
 		glm::vec3(8.0f, 15.0f, 92.0f),
-		glm::vec3(-21.0f, -7.0f, -10.0f)
+		optimizationCameraCenter
 	);
 
 	selectShowcase(std::min(6, static_cast<int>(showcases.size()) - 1));
@@ -1168,6 +1210,14 @@ void renderImGui() {
 				4.0f,
 				"%.2fx"
 			);
+			ImGui::Checkbox("Orbit Camera", &cameraOrbitEnabled);
+			ImGui::SliderFloat(
+				"Camera Orbit",
+				&cameraOrbitSpeed,
+				-8.0f,
+				8.0f,
+				"%.1f deg/s"
+			);
 			if (ImGui::Button("Reset Motion")) {
 				optimizationShowcase->resetMotion();
 			}
@@ -1412,6 +1462,9 @@ int main(int argc, char* argv[]) {
 
 		if (optimizationShowcase != nullptr &&
 			optimizationShowcase->root()->isVisible()) {
+			if (cameraOrbitEnabled && !optimizationBenchmark.running()) {
+				updateCameraOrbit(deltaTime);
+			}
 			optimizationShowcase->animate(
 				deltaTime,
 				orbitalMotionEnabled && !optimizationBenchmark.running(),

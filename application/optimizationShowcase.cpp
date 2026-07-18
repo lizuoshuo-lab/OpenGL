@@ -177,14 +177,14 @@ OptimizationShowcase::OptimizationShowcase(
 	mPlanet->setAngleZ(11.5f);
 	mRoot->addChild(mPlanet);
 
-	constexpr std::size_t asteroidCount = 2500;
+	constexpr std::size_t asteroidCount = 5000;
 	std::mt19937 random(20260717u);
 	std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 	std::uniform_real_distribution<float> angle(0.0f, 360.0f);
 	std::uniform_real_distribution<float> signedUnit(-1.0f, 1.0f);
 	std::uniform_real_distribution<float> angleJitter(-0.012f, 0.012f);
-	std::normal_distribution<float> radialNoise(0.0f, 7.5f);
-	std::normal_distribution<float> verticalNoise(0.0f, 2.8f);
+	std::normal_distribution<float> radialNoise(0.0f, 6.8f);
+	std::normal_distribution<float> verticalNoise(0.0f, 2.6f);
 	const glm::mat4 ringTilt = glm::rotate(
 		glm::rotate(
 			glm::mat4(1.0f),
@@ -284,7 +284,7 @@ OptimizationShowcase::OptimizationShowcase(
 		const float theta =
 			2.0f * glm::pi<float>() * static_cast<float>(index) /
 			static_cast<float>(generatedCount) + angleJitter(random);
-		const float radius = std::clamp(58.0f + radialNoise(random), 40.0f, 78.0f);
+		const float radius = std::clamp(58.0f + radialNoise(random), 42.0f, 75.0f);
 		const glm::vec3 localPosition(
 			std::cos(theta) * radius,
 			verticalNoise(random),
@@ -295,10 +295,10 @@ OptimizationShowcase::OptimizationShowcase(
 		);
 		const float sizeRoll = unit(random);
 		float scale = 0.12f + unit(random) * 0.24f;
-		if (sizeRoll < 0.025f) {
+		if (sizeRoll < 0.03f) {
 			scale = 0.82f + unit(random) * 0.58f;
 		}
-		else if (sizeRoll < 0.20f) {
+		else if (sizeRoll < 0.24f) {
 			scale = 0.36f + unit(random) * 0.38f;
 		}
 		if (position.z > mPlanetCenter.z + 20.0f) {
