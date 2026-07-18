@@ -36,7 +36,7 @@ vec3 proceduralStars(vec2 uv)
 		hash21(cell + vec2(31.0, 19.0))
 	) - 0.5;
 	float seed = hash21(cell + vec2(71.0, 43.0));
-	float exists = step(0.9935, seed);
+	float exists = step(0.9800, seed);
 	float distanceToStar = length(local - offset * 0.64);
 	float sizeSeed = hash21(cell + vec2(5.0, 89.0));
 	float radius = mix(0.035, 0.105, pow(sizeSeed, 3.0));
