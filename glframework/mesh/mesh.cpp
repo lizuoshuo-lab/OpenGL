@@ -37,3 +37,14 @@ void Mesh::updateLod(float cameraDistance, bool enabled) {
 		}
 	}
 }
+
+void Mesh::setBoneMatrices(const std::vector<glm::mat4>& boneMatrices) {
+	const std::size_t count = std::min(boneMatrices.size(), kMaxBoneMatrices);
+	mBoneMatrices.assign(boneMatrices.begin(), boneMatrices.begin() + count);
+}
+
+bool Mesh::isSkinned() const {
+	return mGeometry != nullptr &&
+		mGeometry->hasSkinningData() &&
+		!mBoneMatrices.empty();
+}

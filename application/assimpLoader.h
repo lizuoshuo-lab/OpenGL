@@ -11,10 +11,18 @@
 #include "../glframework/texture.h"
 #include "../glframework/material/advanced/pbrMaterial.h"
 
+class SkinnedModel;
+
 class AssimpLoader {
 public:
 	static Object* load(const std::string& path);
 	static Object* load(
+		const std::string& path,
+		PbrMaterial* materialTemplate,
+		float targetExtent,
+		std::vector<PbrMaterial*>* loadedMaterials = nullptr
+	);
+	static SkinnedModel* loadSkinned(
 		const std::string& path,
 		PbrMaterial* materialTemplate,
 		float targetExtent,

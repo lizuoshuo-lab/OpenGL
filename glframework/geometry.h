@@ -42,11 +42,17 @@ public:
 	static Geometry* createPlane(float width, float height);
 	static Geometry* createScreenPlane();
 
+	void setSkinningData(
+		const std::vector<glm::ivec4>& boneIds,
+		const std::vector<glm::vec4>& boneWeights
+	);
+
 	GLuint getVao()const { return mVao; }
 	uint32_t getIndicesCount()const { return mIndicesCount; }
 	std::size_t getEstimatedGpuBytes() const { return mEstimatedGpuBytes; }
 	const glm::vec3& getMinBounds() const { return mMinBounds; }
 	const glm::vec3& getMaxBounds() const { return mMaxBounds; }
+	bool hasSkinningData() const { return mHasSkinningData; }
 
 private:
 	void updateBounds(const std::vector<float>& positions);
@@ -58,6 +64,8 @@ private:
 	GLuint mNormalVbo{ 0 };
 	GLuint mColorVbo{ 0 };
 	GLuint mTangentVbo{ 0 };
+	GLuint mBoneIdsVbo{ 0 };
+	GLuint mBoneWeightsVbo{ 0 };
 
 	GLuint mEbo{ 0 };
 
@@ -65,4 +73,5 @@ private:
 	std::size_t mEstimatedGpuBytes{ 0 };
 	glm::vec3 mMinBounds{ 0.0f };
 	glm::vec3 mMaxBounds{ 0.0f };
+	bool mHasSkinningData{ false };
 };

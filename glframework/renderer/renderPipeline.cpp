@@ -700,6 +700,15 @@ void RenderPipeline::drawGBufferMesh(Mesh* mesh, Camera* camera) {
 		"instanced",
 		mesh->getType() == ObjectType::InstancedMesh ? 1 : 0
 	);
+	mGBufferShader->setInt("skinned", mesh->isSkinned() ? 1 : 0);
+	if (mesh->isSkinned()) {
+		std::vector<glm::mat4>& boneMatrices = mesh->getBoneMatrices();
+		mGBufferShader->setMatrix4x4Array(
+			"boneMatrices[0]",
+			boneMatrices.data(),
+			static_cast<int>(boneMatrices.size())
+		);
+	}
 
 	const Texture* textures[] = {
 		material->mAlbedo,

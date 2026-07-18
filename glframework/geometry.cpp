@@ -201,6 +201,51 @@ Geometry::~Geometry() {
 	if (mTangentVbo != 0) {
 		glDeleteBuffers(1, &mTangentVbo);
 	}
+	if (mBoneIdsVbo != 0) {
+		glDeleteBuffers(1, &mBoneIdsVbo);
+	}
+	if (mBoneWeightsVbo != 0) {
+		glDeleteBuffers(1, &mBoneWeightsVbo);
+	}
+}
+
+void Geometry::setSkinningData(
+	const std::vector<glm::ivec4>& boneIds,
+	const std::vector<glm::vec4>& boneWeights
+) {
+	if (mVao == 0 || boneIds.empty() || boneIds.size() != boneWeights.size()) {
+		return;
+	}
+
+	glBindVertexArray(mVao);
+
+	glGenBuffers(1, &mBoneIdsVbo);
+	glBindBuffer(GL_ARRAY_BUFFER, mBoneIdsVbo);
+	glBufferData(
+		GL_ARRAY_BUFFER,
+		boneIds.size() * sizeof(glm::ivec4),
+		boneIds.data(),
+		GL_STATIC_DRAW
+	);
+	glEnableVertexAttribArray(8);
+	glVertexAttribIPointer(8, 4, GL_INT, sizeof(glm::ivec4), nullptr);
+
+	glGenBuffers(1, &mBoneWeightsVbo);
+	glBindBuffer(GL_ARRAY_BUFFER, mBoneWeightsVbo);
+	glBufferData(
+		GL_ARRAY_BUFFER,
+		boneWeights.size() * sizeof(glm::vec4),
+		boneWeights.data(),
+		GL_STATIC_DRAW
+	);
+	glEnableVertexAttribArray(9);
+	glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), nullptr);
+
+	glBindVertexArray(0);
+	mEstimatedGpuBytes +=
+		boneIds.size() * sizeof(glm::ivec4) +
+		boneWeights.size() * sizeof(glm::vec4);
+	mHasSkinningData = true;
 }
 
 void Geometry::updateBounds(const std::vector<float>& positions) {

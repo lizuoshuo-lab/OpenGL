@@ -14,6 +14,7 @@
 #include "application/camera/perspectiveCamera.h"
 #include "application/frameCapture.h"
 #include "application/optimizationShowcase.h"
+#include "application/skinnedModel.h"
 
 #include "glframework/framebuffer/framebuffer.h"
 #include "glframework/geometry.h"
@@ -37,6 +38,7 @@ Scene* scene = nullptr;
 Framebuffer* softShadowFbo = nullptr;
 PbrMaterial* pbrMaterial = nullptr;
 OptimizationShowcase* optimizationShowcase = nullptr;
+SkinnedModel* skeletalShowcase = nullptr;
 CubeMaterial* environmentMaterial = nullptr;
 Texture* studioEnvironmentTexture = nullptr;
 Texture* studioIrradianceMap = nullptr;
@@ -45,6 +47,7 @@ Texture* outdoorEnvironmentTexture = nullptr;
 Texture* outdoorIrradianceMap = nullptr;
 Texture* outdoorPrefilterMap = nullptr;
 Texture* starfieldBackgroundTexture = nullptr;
+Texture* skeletalBackgroundTexture = nullptr;
 
 std::vector<PbrMaterial*> pbrMaterials;
 std::vector<PbrMaterial*> materialMatrixMaterials;
@@ -66,6 +69,7 @@ std::vector<ShowcaseEntry> showcases;
 int selectedShowcase = 0;
 int optimizationShowcaseIndex = -1;
 int ssaoShowcaseIndex = -1;
+int skeletalShowcaseIndex = -1;
 bool ssaoRestoreStateValid = false;
 PipelineMode ssaoRestoreMode = PipelineMode::Deferred;
 PipelineDebugView ssaoRestoreDebugView = PipelineDebugView::Final;
@@ -435,33 +439,44 @@ void selectShowcase(int index) {
 	const bool shadowScene = showcases[selectedShowcase].supportsSoftShadow;
 	const bool outdoorScene = selectedShowcase == optimizationShowcaseIndex;
 	const bool ssaoScene = selectedShowcase == ssaoShowcaseIndex;
-	const bool chessShadowScene = shadowScene && !outdoorScene;
+	const bool skeletalScene = selectedShowcase == skeletalShowcaseIndex;
+	const bool chessShadowScene = shadowScene && !outdoorScene && !skeletalScene;
 	if (PerspectiveCamera* perspective = dynamic_cast<PerspectiveCamera*>(camera)) {
-		perspective->mFovy = outdoorScene ? 44.0f : (ssaoScene ? 48.0f : 60.0f);
+		perspective->mFovy = outdoorScene
+			? 44.0f
+			: (ssaoScene ? 48.0f : (skeletalScene ? 46.0f : 60.0f));
 	}
-	autoRotateShowcase = !shadowScene && !outdoorScene && !ssaoScene;
+	autoRotateShowcase = !shadowScene && !outdoorScene && !ssaoScene && !skeletalScene;
 	lightEnabled[0] = true;
-	lightEnabled[1] = outdoorScene || !shadowScene;
-	lightUiPower[0] = outdoorScene ? 340000.0f : (chessShadowScene ? 200.0f : 80.0f);
-	lightUiPower[1] = outdoorScene ? 85000.0f : 80.0f;
+	lightEnabled[1] = outdoorScene || !shadowScene || skeletalScene;
+	lightUiPower[0] = outdoorScene
+		? 340000.0f
+		: (chessShadowScene ? 200.0f : (skeletalScene ? 115.0f : 80.0f));
+	lightUiPower[1] = outdoorScene ? 85000.0f : (skeletalScene ? 55.0f : 80.0f);
 	lightUiTint[0] = outdoorScene
 		? glm::vec3(1.0f, 0.80f, 0.62f)
-		: glm::vec3(1.0f);
+		: (skeletalScene ? glm::vec3(1.0f, 0.84f, 0.70f) : glm::vec3(1.0f));
 	lightUiTint[1] = outdoorScene
 		? glm::vec3(0.28f, 0.48f, 1.0f)
-		: glm::vec3(1.0f);
+		: (skeletalScene ? glm::vec3(0.45f, 0.65f, 1.0f) : glm::vec3(1.0f));
 	if (!pointLights.empty()) {
 		pointLights[0]->setPosition(
-			outdoorScene ? glm::vec3(-240.0f, 160.0f, 300.0f) : glm::vec3(-4.5f, 6.5f, 3.0f)
+			outdoorScene
+				? glm::vec3(-240.0f, 160.0f, 300.0f)
+				: (skeletalScene ? glm::vec3(-3.8f, 5.2f, 5.0f) : glm::vec3(-4.5f, 6.5f, 3.0f))
 		);
 	}
 	if (pointLights.size() > 1) {
 		pointLights[1]->setPosition(
-			outdoorScene ? glm::vec3(220.0f, -120.0f, 180.0f) : glm::vec3(5.0f, 5.5f, -5.0f)
+			outdoorScene
+				? glm::vec3(220.0f, -120.0f, 180.0f)
+				: (skeletalScene ? glm::vec3(4.5f, 2.0f, -4.0f) : glm::vec3(5.0f, 5.5f, -5.0f))
 		);
 	}
 	if (pbrMaterial != nullptr) {
-		pbrMaterial->mEnvIntensity = chessShadowScene ? 0.4f : (outdoorScene ? 0.38f : 1.0f);
+		pbrMaterial->mEnvIntensity = chessShadowScene
+			? 0.4f
+			: (outdoorScene ? 0.38f : (skeletalScene ? 0.82f : 1.0f));
 		pbrMaterial->mNormalStrength = outdoorScene ? 0.82f : 1.0f;
 		pbrMaterial->mSurfaceVariation = outdoorScene ? 0.10f : 0.0f;
 		if (outdoorScene && outdoorIrradianceMap != nullptr &&
@@ -475,9 +490,15 @@ void selectShowcase(int index) {
 		}
 	}
 	if (environmentMaterial != nullptr) {
-		environmentMaterial->mDiffuse = outdoorScene && starfieldBackgroundTexture != nullptr
-			? starfieldBackgroundTexture
-			: studioEnvironmentTexture;
+		if (outdoorScene && starfieldBackgroundTexture != nullptr) {
+			environmentMaterial->mDiffuse = starfieldBackgroundTexture;
+		}
+		else if (skeletalScene && skeletalBackgroundTexture != nullptr) {
+			environmentMaterial->mDiffuse = skeletalBackgroundTexture;
+		}
+		else {
+			environmentMaterial->mDiffuse = studioEnvironmentTexture;
+		}
 		environmentMaterial->mIntensity = 1.0f;
 		environmentMaterial->mBlackLevel = 0.0f;
 		environmentMaterial->mStarIntensity = outdoorScene ? 0.78f : 0.0f;
@@ -485,12 +506,16 @@ void selectShowcase(int index) {
 	if (renderPipeline != nullptr) {
 		PipelineSettings& settings = renderPipeline->settings();
 		settings.exposure = 1.0f;
-		settings.bloomIntensity = outdoorScene ? 0.05f : 0.12f;
+		settings.bloomIntensity = outdoorScene ? 0.05f : (skeletalScene ? 0.08f : 0.12f);
 		settings.ssaoEnabled = true;
 		settings.ssaoSamples = ssaoScene ? 64 : 32;
-		settings.ssaoRadius = ssaoScene ? 1.0f : (outdoorScene ? 0.82f : 0.55f);
+		settings.ssaoRadius = ssaoScene
+			? 1.0f
+			: (outdoorScene ? 0.82f : (skeletalScene ? 0.70f : 0.55f));
 		settings.ssaoBias = ssaoScene ? 0.025f : settings.ssaoBias;
-		settings.ssaoStrength = ssaoScene ? 1.55f : (outdoorScene ? 1.05f : 1.0f);
+		settings.ssaoStrength = ssaoScene
+			? 1.55f
+			: (outdoorScene ? 1.05f : (skeletalScene ? 1.15f : 1.0f));
 		if (ssaoScene) {
 			if (!previousSsaoScene) {
 				ssaoRestoreMode = settings.mode;
@@ -782,6 +807,10 @@ void onKey(int key, int action, int modifiers) {
 			return;
 		}
 	}
+	if (action == GLFW_PRESS && key == GLFW_KEY_0 && skeletalShowcaseIndex >= 0) {
+		selectShowcase(skeletalShowcaseIndex);
+		return;
+	}
 	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard) {
 		return;
 	}
@@ -859,6 +888,14 @@ void prepare() {
 		0,
 		0,
 		2,
+		255,
+		GL_SRGB_ALPHA
+	);
+	skeletalBackgroundTexture = Texture::createSolidTexture(
+		"skeletal-neutral-backdrop",
+		8,
+		10,
+		14,
 		255,
 		GL_SRGB_ALPHA
 	);
@@ -1058,6 +1095,55 @@ void prepare() {
 		glm::vec3(7.6f, 3.2f, 10.0f),
 		glm::vec3(-0.2f, -0.7f, -1.0f)
 	);
+
+	std::vector<PbrMaterial*> foxMaterials;
+	skeletalShowcase = AssimpLoader::loadSkinned(
+		"assets/models/Fox/Fox.glb",
+		pbrMaterial,
+		4.6f,
+		&foxMaterials
+	);
+	if (skeletalShowcase != nullptr) {
+		pbrMaterials.insert(
+			pbrMaterials.end(),
+			foxMaterials.begin(),
+			foxMaterials.end()
+		);
+
+		Texture* stageAlbedo = Texture::createSolidTexture(
+			"skeletal-stage-albedo",
+			54,
+			59,
+			68,
+			255,
+			GL_SRGB_ALPHA
+		);
+		PbrMaterial* stageMaterial = createSsaoMaterial(
+			stageAlbedo,
+			matrixNormal,
+			matrixWhite,
+			glm::vec4(1.0f)
+		);
+		stageMaterial->mRoughnessScale = 0.82f;
+
+		Object* skeletalScene = new Object();
+		skeletalScene->addChild(skeletalShowcase->root());
+		Mesh* stage = new Mesh(Geometry::createBox(1.0f), stageMaterial);
+		stage->setPosition(glm::vec3(0.0f, -1.06f, 0.0f));
+		stage->setScale(glm::vec3(11.0f, 0.08f, 8.0f));
+		skeletalScene->addChild(stage);
+
+		skeletalShowcaseIndex = static_cast<int>(showcases.size());
+		addShowcase(
+			"Skeletal Animation",
+			"Fox / Khronos glTF Sample Assets; model CC0, rigging and animation CC BY 4.0",
+			skeletalScene,
+			static_cast<int>(foxMaterials.size()) + 1,
+			true,
+			glm::vec3(4.7f, 1.9f, 6.4f),
+			glm::vec3(0.0f, -0.15f, 0.0f)
+		);
+	}
 
 	selectShowcase(std::min(6, static_cast<int>(showcases.size()) - 1));
 	scene->addChild(environmentMesh);
@@ -1362,6 +1448,10 @@ void renderImGui() {
 				optimizationShowcase != nullptr) {
 				optimizationShowcase->resetMotion();
 			}
+			if (selectedShowcase == skeletalShowcaseIndex &&
+				skeletalShowcase != nullptr) {
+				skeletalShowcase->reset();
+			}
 			resetCamera();
 		}
 		if (selectedShowcase == optimizationShowcaseIndex &&
@@ -1399,6 +1489,62 @@ void renderImGui() {
 			);
 			if (ImGui::Button("Reset Motion")) {
 				optimizationShowcase->resetMotion();
+			}
+		}
+		if (selectedShowcase == skeletalShowcaseIndex &&
+			skeletalShowcase != nullptr) {
+			ImGui::SeparatorText("Skeletal Animation");
+			const int currentClip = skeletalShowcase->clipIndex();
+			const char* clipPreview = currentClip >= 0
+				? skeletalShowcase->clipName(currentClip).c_str()
+				: "None";
+			if (ImGui::BeginCombo("Animation Clip", clipPreview)) {
+				for (int clipIndex = 0;
+					clipIndex < skeletalShowcase->clipCount();
+					++clipIndex) {
+					const bool selected = clipIndex == currentClip;
+					if (ImGui::Selectable(
+						skeletalShowcase->clipName(clipIndex).c_str(),
+						selected
+					)) {
+						skeletalShowcase->setClip(clipIndex);
+						skeletalShowcase->setPlaying(true);
+					}
+					if (selected) {
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			bool playing = skeletalShowcase->isPlaying();
+			if (ImGui::Checkbox("Playing", &playing)) {
+				skeletalShowcase->setPlaying(playing);
+			}
+			ImGui::SameLine();
+			bool looping = skeletalShowcase->isLooping();
+			if (ImGui::Checkbox("Loop", &looping)) {
+				skeletalShowcase->setLooping(looping);
+			}
+
+			float speed = skeletalShowcase->playbackSpeed();
+			if (ImGui::SliderFloat("Playback Speed", &speed, 0.1f, 2.5f, "%.2fx")) {
+				skeletalShowcase->setPlaybackSpeed(speed);
+			}
+			float timeline = skeletalShowcase->normalizedTime();
+			if (ImGui::SliderFloat("Timeline", &timeline, 0.0f, 1.0f, "%.3f")) {
+				skeletalShowcase->setNormalizedTime(timeline);
+			}
+			ImGui::Text(
+				"Time %.2f / %.2f s   Bones %d   Nodes %d",
+				skeletalShowcase->timeSeconds(),
+				skeletalShowcase->durationSeconds(),
+				skeletalShowcase->boneCount(),
+				skeletalShowcase->nodeCount()
+			);
+			if (ImGui::Button("Reset Animation")) {
+				skeletalShowcase->reset();
+				skeletalShowcase->setPlaying(true);
 			}
 		}
 		if (showcase.supportsSoftShadow) {
@@ -1658,6 +1804,11 @@ int main(int argc, char* argv[]) {
 				settings.frustumCulling,
 				settings.lodEnabled
 			);
+		}
+
+		if (skeletalShowcase != nullptr &&
+			selectedShowcase == skeletalShowcaseIndex) {
+			skeletalShowcase->update(deltaTime);
 		}
 
 		ShadowPassInput shadowInput;

@@ -349,6 +349,19 @@ void Renderer::renderDepthObject(Object* object) {
 		Mesh* mesh = static_cast<Mesh*>(object);
 		Geometry* geometry = mesh->mGeometry;
 		mShadowShader->setMatrix4x4("modelMatrix", mesh->getModelMatrix());
+		mShadowShader->setInt(
+			"instanced",
+			object->getType() == ObjectType::InstancedMesh ? 1 : 0
+		);
+		mShadowShader->setInt("skinned", mesh->isSkinned() ? 1 : 0);
+		if (mesh->isSkinned()) {
+			std::vector<glm::mat4>& boneMatrices = mesh->getBoneMatrices();
+			mShadowShader->setMatrix4x4Array(
+				"boneMatrices[0]",
+				boneMatrices.data(),
+				static_cast<int>(boneMatrices.size())
+			);
+		}
 		glBindVertexArray(geometry->getVao());
 		if (object->getType() == ObjectType::InstancedMesh) {
 			InstancedMesh* instancedMesh = static_cast<InstancedMesh*>(mesh);
@@ -467,6 +480,15 @@ void Renderer::renderObject(
 			shader->setMatrix3x3("normalMatrix", normalMatrix);
 			shader->setVector3("cameraPosition", camera->mPosition);
 			shader->setInt("instanced", object->getType() == ObjectType::InstancedMesh ? 1 : 0);
+			shader->setInt("skinned", mesh->isSkinned() ? 1 : 0);
+			if (mesh->isSkinned()) {
+				std::vector<glm::mat4>& boneMatrices = mesh->getBoneMatrices();
+				shader->setMatrix4x4Array(
+					"boneMatrices[0]",
+					boneMatrices.data(),
+					static_cast<int>(boneMatrices.size())
+				);
+			}
 
 			//pbr相关参数更新
 			

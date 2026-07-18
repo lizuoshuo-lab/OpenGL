@@ -1,8 +1,13 @@
 #include "assimpLoader.h"
+#include "skinnedModel.h"
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 #include "../glframework/material/phongMaterial.h"
 #include "assimp/GltfMaterial.h"
@@ -84,6 +89,375 @@ Object* AssimpLoader::load(
 	}
 
 	return rootNode;
+}
+
+SkinnedModel* AssimpLoader::loadSkinned(
+	const std::string& path,
+	PbrMaterial* materialTemplate,
+	float targetExtent,
+	std::vector<PbrMaterial*>* loadedMaterials
+) {
+	if (materialTemplate == nullptr) {
+		std::cerr << "A PBR material template is required for skinned models" << std::endl;
+		return nullptr;
+	}
+
+	const std::size_t lastIndex = path.find_last_of("/\\");
+	const std::string rootPath = lastIndex == std::string::npos
+		? std::string()
+		: path.substr(0, lastIndex + 1);
+
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile(path, kImportFlags);
+	if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !scene->mRootNode) {
+		std::cerr << "Failed to load skinned model '" << path << "': "
+			<< importer.GetErrorString() << std::endl;
+		return nullptr;
+	}
+
+	SkinnedModel* model = new SkinnedModel();
+	model->mRoot = new Object();
+	model->mGlobalInverseRoot = glm::inverse(getMat4f(scene->mRootNode->mTransformation));
+
+	std::unordered_map<std::string, int> nodeLookup;
+	std::vector<int> meshNodeIndices(scene->mNumMeshes, -1);
+	std::function<void(aiNode*, int)> copyNode = [&](aiNode* source, int parentIndex) {
+		SkinnedModel::Node node;
+		node.name = source->mName.C_Str();
+		node.parent = parentIndex;
+		node.bindLocal = getMat4f(source->mTransformation);
+
+		aiVector3D scale;
+		aiQuaternion rotation;
+		aiVector3D translation;
+		source->mTransformation.Decompose(scale, rotation, translation);
+		node.bindTranslation = glm::vec3(translation.x, translation.y, translation.z);
+		node.bindRotation = glm::normalize(glm::quat(
+			rotation.w,
+			rotation.x,
+			rotation.y,
+			rotation.z
+		));
+		node.bindScale = glm::vec3(scale.x, scale.y, scale.z);
+		node.global = parentIndex >= 0
+			? model->mNodes[parentIndex].global * node.bindLocal
+			: node.bindLocal;
+
+		const int nodeIndex = static_cast<int>(model->mNodes.size());
+		model->mNodes.push_back(node);
+		nodeLookup[node.name] = nodeIndex;
+		for (unsigned int i = 0; i < source->mNumMeshes; ++i) {
+			const unsigned int meshIndex = source->mMeshes[i];
+			if (meshIndex < meshNodeIndices.size()) {
+				meshNodeIndices[meshIndex] = nodeIndex;
+			}
+		}
+
+		for (unsigned int i = 0; i < source->mNumChildren; ++i) {
+			copyNode(source->mChildren[i], nodeIndex);
+		}
+	};
+	copyNode(scene->mRootNode, -1);
+
+	std::vector<PbrMaterial*> materialCache(scene->mNumMaterials, nullptr);
+	std::unordered_set<int> uniqueBoneNodes;
+	for (unsigned int meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
+		aiMesh* sourceMesh = scene->mMeshes[meshIndex];
+		std::vector<float> positions;
+		std::vector<float> normals;
+		std::vector<float> uvs;
+		std::vector<float> tangents;
+		std::vector<unsigned int> indices;
+		positions.reserve(sourceMesh->mNumVertices * 3);
+		normals.reserve(sourceMesh->mNumVertices * 3);
+		uvs.reserve(sourceMesh->mNumVertices * 2);
+		tangents.reserve(sourceMesh->mNumVertices * 3);
+
+		for (unsigned int vertexIndex = 0;
+			vertexIndex < sourceMesh->mNumVertices;
+			++vertexIndex) {
+			const aiVector3D& position = sourceMesh->mVertices[vertexIndex];
+			const aiVector3D& normal = sourceMesh->mNormals[vertexIndex];
+			positions.insert(positions.end(), { position.x, position.y, position.z });
+			normals.insert(normals.end(), { normal.x, normal.y, normal.z });
+
+			if (sourceMesh->mTextureCoords[0] != nullptr) {
+				uvs.insert(uvs.end(), {
+					sourceMesh->mTextureCoords[0][vertexIndex].x,
+					sourceMesh->mTextureCoords[0][vertexIndex].y
+				});
+			}
+			else {
+				uvs.insert(uvs.end(), { 0.0f, 0.0f });
+			}
+
+			if (sourceMesh->HasTangentsAndBitangents()) {
+				const aiVector3D& tangent = sourceMesh->mTangents[vertexIndex];
+				tangents.insert(tangents.end(), { tangent.x, tangent.y, tangent.z });
+			}
+			else {
+				const glm::vec3 n = glm::normalize(glm::vec3(
+					normal.x,
+					normal.y,
+					normal.z
+				));
+				const glm::vec3 reference = std::abs(n.y) < 0.999f
+					? glm::vec3(0.0f, 1.0f, 0.0f)
+					: glm::vec3(1.0f, 0.0f, 0.0f);
+				const glm::vec3 tangent = glm::normalize(glm::cross(reference, n));
+				tangents.insert(tangents.end(), { tangent.x, tangent.y, tangent.z });
+			}
+		}
+
+		for (unsigned int faceIndex = 0; faceIndex < sourceMesh->mNumFaces; ++faceIndex) {
+			const aiFace& face = sourceMesh->mFaces[faceIndex];
+			for (unsigned int index = 0; index < face.mNumIndices; ++index) {
+				indices.push_back(face.mIndices[index]);
+			}
+		}
+
+		Geometry* geometry = new Geometry(positions, normals, uvs, indices, tangents);
+		PbrMaterial* material = nullptr;
+		if (sourceMesh->mMaterialIndex < materialCache.size()) {
+			PbrMaterial*& cachedMaterial = materialCache[sourceMesh->mMaterialIndex];
+			if (cachedMaterial == nullptr) {
+				cachedMaterial = createPbrMaterial(
+					scene->mMaterials[sourceMesh->mMaterialIndex],
+					scene,
+					rootPath,
+					materialTemplate
+				);
+			}
+			material = cachedMaterial;
+		}
+		if (material == nullptr) {
+			material = materialTemplate;
+		}
+
+		Mesh* mesh = new Mesh(geometry, material);
+		model->mRoot->addChild(mesh);
+
+		SkinnedModel::SkinBinding binding;
+		binding.mesh = mesh;
+		std::vector<std::vector<std::pair<int, float>>> influences(
+			sourceMesh->mNumVertices
+		);
+		for (unsigned int boneIndex = 0; boneIndex < sourceMesh->mNumBones; ++boneIndex) {
+			if (binding.boneNodes.size() >= Mesh::kMaxBoneMatrices) {
+				std::cerr << "Mesh '" << sourceMesh->mName.C_Str()
+					<< "' exceeds the " << Mesh::kMaxBoneMatrices
+					<< " bone GPU palette limit" << std::endl;
+				break;
+			}
+
+			const aiBone* sourceBone = sourceMesh->mBones[boneIndex];
+			const auto nodeIterator = nodeLookup.find(sourceBone->mName.C_Str());
+			if (nodeIterator == nodeLookup.end()) {
+				std::cerr << "Missing skeleton node for bone '"
+					<< sourceBone->mName.C_Str() << "'" << std::endl;
+				continue;
+			}
+
+			const int localBoneIndex = static_cast<int>(binding.boneNodes.size());
+			binding.boneNodes.push_back(nodeIterator->second);
+			binding.boneOffsets.push_back(getMat4f(sourceBone->mOffsetMatrix));
+			uniqueBoneNodes.insert(nodeIterator->second);
+			for (unsigned int weightIndex = 0;
+				weightIndex < sourceBone->mNumWeights;
+				++weightIndex) {
+				const aiVertexWeight& weight = sourceBone->mWeights[weightIndex];
+				if (weight.mVertexId < influences.size() && weight.mWeight > 0.0f) {
+					influences[weight.mVertexId].push_back({
+						localBoneIndex,
+						weight.mWeight
+					});
+				}
+			}
+		}
+
+		if (!binding.boneNodes.empty()) {
+			std::vector<glm::ivec4> boneIds(sourceMesh->mNumVertices, glm::ivec4(0));
+			std::vector<glm::vec4> boneWeights(sourceMesh->mNumVertices, glm::vec4(0.0f));
+			for (std::size_t vertexIndex = 0; vertexIndex < influences.size(); ++vertexIndex) {
+				auto& vertexInfluences = influences[vertexIndex];
+				std::sort(
+					vertexInfluences.begin(),
+					vertexInfluences.end(),
+					[](const auto& left, const auto& right) {
+						return left.second > right.second;
+					}
+				);
+				const std::size_t influenceCount = std::min<std::size_t>(
+					4,
+					vertexInfluences.size()
+				);
+				float totalWeight = 0.0f;
+				for (std::size_t influenceIndex = 0;
+					influenceIndex < influenceCount;
+					++influenceIndex) {
+					boneIds[vertexIndex][static_cast<glm::length_t>(influenceIndex)] =
+						vertexInfluences[influenceIndex].first;
+					boneWeights[vertexIndex][static_cast<glm::length_t>(influenceIndex)] =
+						vertexInfluences[influenceIndex].second;
+					totalWeight += vertexInfluences[influenceIndex].second;
+				}
+				if (totalWeight > std::numeric_limits<float>::epsilon()) {
+					boneWeights[vertexIndex] /= totalWeight;
+				}
+			}
+
+			geometry->setSkinningData(boneIds, boneWeights);
+			mesh->setBoneMatrices(std::vector<glm::mat4>(
+				binding.boneNodes.size(),
+				glm::mat4(1.0f)
+			));
+			model->mSkinBindings.push_back(std::move(binding));
+		}
+		else if (meshIndex < meshNodeIndices.size() && meshNodeIndices[meshIndex] >= 0) {
+			mesh->setLocalMatrix(
+				model->mGlobalInverseRoot *
+				model->mNodes[meshNodeIndices[meshIndex]].global
+			);
+		}
+	}
+	model->mBoneCount = static_cast<int>(uniqueBoneNodes.size());
+
+	for (unsigned int animationIndex = 0;
+		animationIndex < scene->mNumAnimations;
+		++animationIndex) {
+		const aiAnimation* sourceAnimation = scene->mAnimations[animationIndex];
+		SkinnedModel::Clip clip;
+		clip.name = sourceAnimation->mName.length > 0
+			? sourceAnimation->mName.C_Str()
+			: "Animation " + std::to_string(animationIndex + 1);
+		clip.durationTicks = sourceAnimation->mDuration;
+		clip.ticksPerSecond = sourceAnimation->mTicksPerSecond > 0.0
+			? sourceAnimation->mTicksPerSecond
+			: 25.0;
+		clip.channelByNode.assign(model->mNodes.size(), -1);
+
+		for (unsigned int channelIndex = 0;
+			channelIndex < sourceAnimation->mNumChannels;
+			++channelIndex) {
+			const aiNodeAnim* sourceChannel = sourceAnimation->mChannels[channelIndex];
+			const auto nodeIterator = nodeLookup.find(sourceChannel->mNodeName.C_Str());
+			if (nodeIterator == nodeLookup.end()) {
+				continue;
+			}
+
+			SkinnedModel::Channel channel;
+			channel.nodeIndex = nodeIterator->second;
+			channel.positions.reserve(sourceChannel->mNumPositionKeys);
+			for (unsigned int keyIndex = 0;
+				keyIndex < sourceChannel->mNumPositionKeys;
+				++keyIndex) {
+				const aiVectorKey& key = sourceChannel->mPositionKeys[keyIndex];
+				channel.positions.push_back({
+					key.mTime,
+					glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z)
+				});
+				clip.durationTicks = std::max(clip.durationTicks, key.mTime);
+			}
+
+			channel.rotations.reserve(sourceChannel->mNumRotationKeys);
+			for (unsigned int keyIndex = 0;
+				keyIndex < sourceChannel->mNumRotationKeys;
+				++keyIndex) {
+				const aiQuatKey& key = sourceChannel->mRotationKeys[keyIndex];
+				channel.rotations.push_back({
+					key.mTime,
+					glm::normalize(glm::quat(
+						key.mValue.w,
+						key.mValue.x,
+						key.mValue.y,
+						key.mValue.z
+					))
+				});
+				clip.durationTicks = std::max(clip.durationTicks, key.mTime);
+			}
+
+			channel.scales.reserve(sourceChannel->mNumScalingKeys);
+			for (unsigned int keyIndex = 0;
+				keyIndex < sourceChannel->mNumScalingKeys;
+				++keyIndex) {
+				const aiVectorKey& key = sourceChannel->mScalingKeys[keyIndex];
+				channel.scales.push_back({
+					key.mTime,
+					glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z)
+				});
+				clip.durationTicks = std::max(clip.durationTicks, key.mTime);
+			}
+
+			clip.channelByNode[channel.nodeIndex] =
+				static_cast<int>(clip.channels.size());
+			clip.channels.push_back(std::move(channel));
+		}
+		model->mClips.push_back(std::move(clip));
+	}
+
+	if (loadedMaterials != nullptr) {
+		for (PbrMaterial* material : materialCache) {
+			if (material != nullptr) {
+				loadedMaterials->push_back(material);
+			}
+		}
+	}
+
+	if (targetExtent > 0.0f) {
+		const float maxValue = std::numeric_limits<float>::max();
+		aiVector3D sourceMinimum(maxValue, maxValue, maxValue);
+		aiVector3D sourceMaximum(-maxValue, -maxValue, -maxValue);
+		calculateBounds(
+			scene->mRootNode,
+			scene,
+			aiMatrix4x4(),
+			sourceMinimum,
+			sourceMaximum
+		);
+
+		glm::vec3 minimum(maxValue);
+		glm::vec3 maximum(-maxValue);
+		for (int x = 0; x < 2; ++x) {
+			for (int y = 0; y < 2; ++y) {
+				for (int z = 0; z < 2; ++z) {
+					const glm::vec4 sourceCorner(
+						x == 0 ? sourceMinimum.x : sourceMaximum.x,
+						y == 0 ? sourceMinimum.y : sourceMaximum.y,
+						z == 0 ? sourceMinimum.z : sourceMaximum.z,
+						1.0f
+					);
+					const glm::vec3 corner = glm::vec3(
+						model->mGlobalInverseRoot * sourceCorner
+					);
+					minimum = glm::min(minimum, corner);
+					maximum = glm::max(maximum, corner);
+				}
+			}
+		}
+
+		const glm::vec3 size = maximum - minimum;
+		const float maxExtent = std::max(size.x, std::max(size.y, size.z));
+		if (maxExtent > std::numeric_limits<float>::epsilon()) {
+			const float normalizedScale = targetExtent / maxExtent;
+			const glm::vec3 center = (minimum + maximum) * 0.5f;
+			model->mRoot->setScale(glm::vec3(normalizedScale));
+			model->mRoot->setPosition(-center * normalizedScale);
+		}
+	}
+
+	int defaultClip = 0;
+	for (int clipIndex = 0; clipIndex < model->clipCount(); ++clipIndex) {
+		if (model->clipName(clipIndex).find("Walk") != std::string::npos) {
+			defaultClip = clipIndex;
+			break;
+		}
+	}
+	model->setClip(defaultClip);
+	std::cout << "Loaded skinned model '" << path << "': "
+		<< model->nodeCount() << " nodes, "
+		<< model->boneCount() << " bones, "
+		<< model->clipCount() << " clips" << std::endl;
+	return model;
 }
 
 void AssimpLoader::processNode(
