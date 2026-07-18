@@ -1713,6 +1713,7 @@ int main(int argc, char* argv[]) {
 	bool exitAfterBenchmark = false;
 	bool hideUi = false;
 	int launchShowcase = -1;
+	std::string launchAnimationClip;
 	std::string screenshotPath;
 	for (int i = 1; i < argc; ++i) {
 		const std::string argument(argv[i]);
@@ -1723,12 +1724,16 @@ int main(int argc, char* argv[]) {
 		hideUi = hideUi || argument == "--no-ui";
 		launchBenchmark = launchBenchmark || exitAfterBenchmark;
 		const std::string showcasePrefix = "--showcase=";
+		const std::string animationPrefix = "--animation=";
 		const std::string screenshotPrefix = "--screenshot=";
 		if (argument.rfind(showcasePrefix, 0) == 0) {
 			launchShowcase = std::atoi(argument.substr(showcasePrefix.size()).c_str()) - 1;
 		}
 		else if (argument.rfind(screenshotPrefix, 0) == 0) {
 			screenshotPath = argument.substr(screenshotPrefix.size());
+		}
+		else if (argument.rfind(animationPrefix, 0) == 0) {
+			launchAnimationClip = argument.substr(animationPrefix.size());
 		}
 	}
 
@@ -1749,6 +1754,21 @@ int main(int argc, char* argv[]) {
 	initImGui();
 	if (launchShowcase >= 0) {
 		selectShowcase(launchShowcase);
+	}
+	if (!launchAnimationClip.empty() && skeletalShowcase != nullptr) {
+		bool foundClip = false;
+		for (int clipIndex = 0; clipIndex < skeletalShowcase->clipCount(); ++clipIndex) {
+			if (skeletalShowcase->clipName(clipIndex) == launchAnimationClip) {
+				selectShowcase(skeletalShowcaseIndex);
+				skeletalShowcase->setClip(clipIndex);
+				skeletalShowcase->setPlaying(true);
+				foundClip = true;
+				break;
+			}
+		}
+		if (!foundClip) {
+			std::cerr << "Unknown animation clip: " << launchAnimationClip << std::endl;
+		}
 	}
 	if (launchFullscreen) {
 		glApp->setFullscreen(true);

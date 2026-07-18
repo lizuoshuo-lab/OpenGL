@@ -12,6 +12,8 @@
 
 ![Fox GPU skeletal animation](assets/showcase_skeletal_animation_4k.png)
 
+[观看 24 秒 4K 实机演示：Survey / Walk / Run](assets/skeletal-animation-showcase-24s.mp4)
+
 ## 数据链路
 
 ```mermaid
@@ -92,10 +94,22 @@ mat4 skinMatrix =
 .\Debug\openglStudy.exe --showcase=10
 ```
 
+直接选择动画片段：
+
+```powershell
+.\Debug\openglStudy.exe --showcase=10 --animation=Run
+```
+
 生成 4K 截图并自动关闭：
 
 ```powershell
 .\Debug\openglStudy.exe --fullscreen --showcase=10 --screenshot=verification\skeletal_animation_4k.png
+```
+
+录制 Survey、Walk、Run 各 8 秒并自动校验 4K/30 FPS 成片：
+
+```powershell
+.\tools\record_showcase_4k.ps1 -BuildDirectory .\build -Profile Skeletal -FfmpegPath ffmpeg
 ```
 
 验证项：

@@ -3,6 +3,8 @@ param(
     [string]$BuildDirectory,
     [string]$FfmpegPath = "ffmpeg",
     [string]$OutputPath,
+    [ValidateSet("Renderer", "Skeletal")]
+    [string]$Profile = "Renderer",
     [int]$OutputIndex = 0,
     [int]$WarmupSeconds = 3,
     [int]$StartupTimeoutSeconds = 90
@@ -17,7 +19,12 @@ if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
 $BuildDirectory = (Resolve-Path $BuildDirectory).Path
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $projectRoot "docs\assets\opengl-ibl-showcase-30s.mp4"
+    $defaultVideo = if ($Profile -eq "Skeletal") {
+        "docs\assets\skeletal-animation-showcase-24s.mp4"
+    } else {
+        "docs\assets\opengl-ibl-showcase-30s.mp4"
+    }
+    $OutputPath = Join-Path $projectRoot $defaultVideo
 }
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputParent = Split-Path -Parent $OutputPath
@@ -69,22 +76,36 @@ namespace OpenGLCapture {
 '@
 }
 
-$scenes = @(
-    [pscustomobject]@{ Name = "01_chess"; Showcase = 7; Frames = 240 },
-    [pscustomobject]@{ Name = "02_flight_helmet"; Showcase = 5; Frames = 210 },
-    [pscustomobject]@{ Name = "03_toy_car"; Showcase = 6; Frames = 210 },
-    [pscustomobject]@{ Name = "04_material_matrix"; Showcase = 1; Frames = 240 }
-)
+$scenes = if ($Profile -eq "Skeletal") {
+    @(
+        [pscustomobject]@{ Name = "01_survey"; Showcase = 10; Animation = "Survey"; Frames = 240 },
+        [pscustomobject]@{ Name = "02_walk"; Showcase = 10; Animation = "Walk"; Frames = 240 },
+        [pscustomobject]@{ Name = "03_run"; Showcase = 10; Animation = "Run"; Frames = 240 }
+    )
+} else {
+    @(
+        [pscustomobject]@{ Name = "01_chess"; Showcase = 7; Animation = $null; Frames = 240 },
+        [pscustomobject]@{ Name = "02_flight_helmet"; Showcase = 5; Animation = $null; Frames = 210 },
+        [pscustomobject]@{ Name = "03_toy_car"; Showcase = 6; Animation = $null; Frames = 210 },
+        [pscustomobject]@{ Name = "04_material_matrix"; Showcase = 1; Animation = $null; Frames = 240 }
+    )
+}
+$expectedFrames = ($scenes | Measure-Object -Property Frames -Sum).Sum
+$expectedDuration = $expectedFrames / 30.0
 
-$tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("OpenGL-IBL-Capture-" + [guid]::NewGuid())
+$tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("OpenGL-Capture-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 $activeProcess = $null
 
 try {
     foreach ($scene in $scenes) {
+        $appArguments = @("--fullscreen", ("--showcase={0}" -f $scene.Showcase))
+        if (-not [string]::IsNullOrWhiteSpace($scene.Animation)) {
+            $appArguments += "--animation=$($scene.Animation)"
+        }
         $activeProcess = Start-Process `
             -FilePath $exePath `
-            -ArgumentList "--fullscreen", ("--showcase={0}" -f $scene.Showcase) `
+            -ArgumentList $appArguments `
             -WorkingDirectory $BuildDirectory `
             -PassThru
 
@@ -185,15 +206,15 @@ try {
     $valid = $stream.width -eq 3840 -and
         $stream.height -eq 2160 -and
         $stream.r_frame_rate -eq "30/1" -and
-        $stream.nb_frames -eq "900" -and
+        [int]$stream.nb_frames -eq $expectedFrames -and
         $stream.pix_fmt -eq "yuv420p" -and
-        [math]::Abs([double]$probe.format.duration - 30.0) -lt 0.001
+        [math]::Abs([double]$probe.format.duration - $expectedDuration) -lt 0.001
     if (-not $valid) {
-        throw "Recorded output failed the 4K/30 FPS/900-frame validation."
+        throw "Recorded output failed the 4K/30 FPS/frame-count validation."
     }
 
     Write-Host "Created $OutputPath"
-    Write-Host "Validated 3840x2160, 30 FPS, 900 frames, 30.000 seconds."
+    Write-Host ("Validated 3840x2160, 30 FPS, {0} frames, {1:N3} seconds." -f $expectedFrames, $expectedDuration)
 } finally {
     if ($null -ne $activeProcess) {
         $activeProcess.Refresh()
