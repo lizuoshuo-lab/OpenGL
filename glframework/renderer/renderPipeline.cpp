@@ -102,6 +102,7 @@ RenderPipeline::~RenderPipeline() {
 	delete mGBufferShader;
 	delete mSsaoShader;
 	delete mSsaoBlurShader;
+	delete mSsaoUpsampleShader;
 	delete mLightingShader;
 	delete mBloomExtractShader;
 	delete mGaussianBlurShader;
@@ -121,6 +122,10 @@ void RenderPipeline::createShaders() {
 	mSsaoBlurShader = new Shader(
 		"assets/shaders/screen.vert",
 		"assets/shaders/deferred/ssaoBlur.frag"
+	);
+	mSsaoUpsampleShader = new Shader(
+		"assets/shaders/screen.vert",
+		"assets/shaders/deferred/ssaoUpsample.frag"
 	);
 	mLightingShader = new Shader(
 		"assets/shaders/screen.vert",
@@ -238,7 +243,14 @@ void RenderPipeline::createRenderTargets() {
 	glBindFramebuffer(GL_FRAMEBUFFER, mSsaoBlurFbo);
 	createTexture2D(mSsaoBlurTexture, GL_R16F, GL_RED, GL_FLOAT, mHalfWidth, mHalfHeight, GL_LINEAR);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mSsaoBlurTexture, 0);
-	checkFramebuffer("SSAO Blur");
+	checkFramebuffer("SSAO Bilateral Blur");
+	glClearBufferfv(GL_COLOR, 0, white);
+
+	glGenFramebuffers(1, &mSsaoUpsampleFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, mSsaoUpsampleFbo);
+	createTexture2D(mSsaoUpsampleTexture, GL_R16F, GL_RED, GL_FLOAT, mWidth, mHeight, GL_LINEAR);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mSsaoUpsampleTexture, 0);
+	checkFramebuffer("SSAO Joint Bilateral Upsample");
 	glClearBufferfv(GL_COLOR, 0, white);
 
 	glGenFramebuffers(1, &mBloomExtractFbo);
@@ -280,7 +292,8 @@ void RenderPipeline::createRenderTargets() {
 	labelObject(GL_TEXTURE, mGAlbedoMetallic, "GBuffer Albedo Metallic");
 	labelObject(GL_TEXTURE, mGDepth, "GBuffer Depth");
 	labelObject(GL_TEXTURE, mHdrColor, "HDR Lighting");
-	labelObject(GL_TEXTURE, mSsaoBlurTexture, "SSAO Filtered");
+	labelObject(GL_TEXTURE, mSsaoBlurTexture, "SSAO Filtered Half Resolution");
+	labelObject(GL_TEXTURE, mSsaoUpsampleTexture, "SSAO Full Resolution");
 	labelObject(GL_TEXTURE, mBloomExtractTexture, "Bloom Bright Pass");
 }
 
@@ -295,9 +308,10 @@ void RenderPipeline::destroyRenderTargets() {
 		mHdrFbo,
 		mSsaoFbo,
 		mSsaoBlurFbo,
+		mSsaoUpsampleFbo,
 		mBloomExtractFbo
 	};
-	glDeleteFramebuffers(5, framebuffers);
+	glDeleteFramebuffers(6, framebuffers);
 	glDeleteFramebuffers(static_cast<GLsizei>(mBloomFbos.size()), mBloomFbos.data());
 
 	const GLuint textures[] = {
@@ -308,15 +322,17 @@ void RenderPipeline::destroyRenderTargets() {
 		mHdrColor,
 		mSsaoTexture,
 		mSsaoBlurTexture,
+		mSsaoUpsampleTexture,
 		mBloomExtractTexture
 	};
-	glDeleteTextures(8, textures);
+	glDeleteTextures(9, textures);
 	glDeleteTextures(static_cast<GLsizei>(mBloomTextures.size()), mBloomTextures.data());
 
 	mGBufferFbo = 0;
 	mHdrFbo = 0;
 	mSsaoFbo = 0;
 	mSsaoBlurFbo = 0;
+	mSsaoUpsampleFbo = 0;
 	mBloomExtractFbo = 0;
 	mBloomFbos.fill(0);
 	mGPositionAo = 0;
@@ -326,6 +342,7 @@ void RenderPipeline::destroyRenderTargets() {
 	mHdrColor = 0;
 	mSsaoTexture = 0;
 	mSsaoBlurTexture = 0;
+	mSsaoUpsampleTexture = 0;
 	mBloomExtractTexture = 0;
 	mBloomTextures.fill(0);
 	mBloomResultTexture = 0;
@@ -750,6 +767,8 @@ void RenderPipeline::executeSsaoPass(Camera* camera) {
 		glClearBufferfv(GL_COLOR, 0, white);
 		glBindFramebuffer(GL_FRAMEBUFFER, mSsaoBlurFbo);
 		glClearBufferfv(GL_COLOR, 0, white);
+		glBindFramebuffer(GL_FRAMEBUFFER, mSsaoUpsampleFbo);
+		glClearBufferfv(GL_COLOR, 0, white);
 		return;
 	}
 
@@ -770,7 +789,7 @@ void RenderPipeline::executeSsaoPass(Camera* camera) {
 			mSsaoKernel[i]
 		);
 	}
-	mSsaoShader->setInt("sampleCount", std::clamp(mSettings.ssaoSamples, 1, 32));
+	mSsaoShader->setInt("sampleCount", std::clamp(mSettings.ssaoSamples, 1, 64));
 	mSsaoShader->setFloat("radius", mSettings.ssaoRadius);
 	mSsaoShader->setFloat("bias", mSettings.ssaoBias);
 	mSsaoShader->setMatrix4x4("viewMatrix", camera->getViewMatrix());
@@ -781,15 +800,31 @@ void RenderPipeline::executeSsaoPass(Camera* camera) {
 	drawFullscreen();
 	mSsaoShader->end();
 
+	glViewport(0, 0, mHalfWidth, mHalfHeight);
 	glBindFramebuffer(GL_FRAMEBUFFER, mSsaoBlurFbo);
 	glClear(GL_COLOR_BUFFER_BIT);
 	mSsaoBlurShader->begin();
 	mSsaoBlurShader->setInt("ssaoInput", 0);
 	mSsaoBlurShader->setInt("gPositionAo", 1);
+	mSsaoBlurShader->setInt("gNormalRoughness", 2);
 	bindTexture2D(mSsaoTexture, 0);
 	bindTexture2D(mGPositionAo, 1);
+	bindTexture2D(mGNormalRoughness, 2);
 	drawFullscreen();
 	mSsaoBlurShader->end();
+
+	glViewport(0, 0, mWidth, mHeight);
+	glBindFramebuffer(GL_FRAMEBUFFER, mSsaoUpsampleFbo);
+	glClear(GL_COLOR_BUFFER_BIT);
+	mSsaoUpsampleShader->begin();
+	mSsaoUpsampleShader->setInt("ssaoInput", 0);
+	mSsaoUpsampleShader->setInt("gPositionAo", 1);
+	mSsaoUpsampleShader->setInt("gNormalRoughness", 2);
+	bindTexture2D(mSsaoBlurTexture, 0);
+	bindTexture2D(mGPositionAo, 1);
+	bindTexture2D(mGNormalRoughness, 2);
+	drawFullscreen();
+	mSsaoUpsampleShader->end();
 }
 
 void RenderPipeline::executeLightingPass(
@@ -818,7 +853,7 @@ void RenderPipeline::executeLightingPass(
 	bindTexture2D(mGPositionAo, 0);
 	bindTexture2D(mGNormalRoughness, 1);
 	bindTexture2D(mGAlbedoMetallic, 2);
-	bindTexture2D(mSsaoBlurTexture, 3);
+	bindTexture2D(mSsaoUpsampleTexture, 3);
 	if (globalPbr->mIrradianceMap != nullptr) {
 		globalPbr->mIrradianceMap->setUnit(4);
 		globalPbr->mIrradianceMap->bind();
@@ -1025,6 +1060,7 @@ void RenderPipeline::executePostProcessPass(Camera* camera) {
 	mPostProcessShader->setInt("depthTexture", 6);
 	mPostProcessShader->setFloat("exposure", mSettings.exposure);
 	mPostProcessShader->setFloat("bloomIntensity", mSettings.bloomIntensity);
+	mPostProcessShader->setFloat("ssaoStrength", mSettings.ssaoStrength);
 	mPostProcessShader->setFloat("cameraNear", std::max(camera->mNear, 0.001f));
 	mPostProcessShader->setFloat("cameraFar", std::max(camera->mFar, camera->mNear + 0.001f));
 	mPostProcessShader->setInt("bloomEnabled", mSettings.bloomEnabled ? 1 : 0);
@@ -1035,7 +1071,7 @@ void RenderPipeline::executePostProcessPass(Camera* camera) {
 	bindTexture2D(mGPositionAo, 2);
 	bindTexture2D(mGNormalRoughness, 3);
 	bindTexture2D(mGAlbedoMetallic, 4);
-	bindTexture2D(mSsaoBlurTexture, 5);
+	bindTexture2D(mSsaoUpsampleTexture, 5);
 	bindTexture2D(mGDepth, 6);
 	drawFullscreen();
 	mPostProcessShader->end();
@@ -1071,7 +1107,7 @@ GLuint RenderPipeline::texture(PipelineTexture textureType) const {
 	case PipelineTexture::AlbedoMetallic:
 		return mGAlbedoMetallic;
 	case PipelineTexture::Ssao:
-		return mSsaoBlurTexture;
+		return mSsaoUpsampleTexture;
 	case PipelineTexture::Bloom:
 		return mBloomResultTexture;
 	case PipelineTexture::Hdr:
@@ -1088,7 +1124,7 @@ std::size_t RenderPipeline::calculateRenderTargetBytes() const {
 		static_cast<std::size_t>(mWidth) * static_cast<std::size_t>(mHeight);
 	const std::size_t halfPixels =
 		static_cast<std::size_t>(mHalfWidth) * static_cast<std::size_t>(mHalfHeight);
-	std::size_t bytes = fullPixels * 32 + halfPixels * 28 + 16 * 3 * sizeof(float);
+	std::size_t bytes = fullPixels * 34 + halfPixels * 28 + 16 * 3 * sizeof(float);
 
 	const Framebuffer* forwardTargets[] = { mForwardMsaa, mForwardResolve };
 	for (const Framebuffer* target : forwardTargets) {

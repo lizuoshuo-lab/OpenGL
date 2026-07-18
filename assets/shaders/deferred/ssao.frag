@@ -7,7 +7,7 @@ in vec2 uv;
 uniform sampler2D gPositionAo;
 uniform sampler2D gNormalRoughness;
 uniform sampler2D noiseTexture;
-uniform vec3 samples[32];
+uniform vec3 samples[64];
 uniform int sampleCount;
 uniform float radius;
 uniform float bias;
@@ -24,7 +24,8 @@ void main()
 	}
 	normal = normalize(normal);
 
-	vec2 noiseScale = vec2(textureSize(gPositionAo, 0)) / 4.0;
+	vec2 noiseScale = vec2(textureSize(gPositionAo, 0)) * 0.5 /
+		vec2(textureSize(noiseTexture, 0));
 	vec3 randomVector = normalize(texture(noiseTexture, uv * noiseScale).xyz);
 	vec3 tangent = normalize(randomVector - normal * dot(randomVector, normal));
 	vec3 bitangent = cross(normal, tangent);

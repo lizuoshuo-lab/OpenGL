@@ -22,7 +22,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Shadow | 场景、光源 | Depth Map | 棋子软阴影使用 2048² 深度图与 Poisson PCF |
 | GBuffer | Opaque PBR Mesh | 3 MRT + Depth | 一次几何遍历写入材质和几何信息 |
-| SSAO | Position、Normal、Depth | 半分辨率 R16F AO | Kernel + Noise 采样，随后模糊 |
+| SSAO | Position、Normal、Depth | 半分辨率 R16F AO + 全分辨率 AO | 最高 64 样本 Kernel + Noise，7 x 7 双边滤波并联合上采样 |
 | Lighting | GBuffer、SSAO、IBL、Lights | RGBA16F HDR | Deferred Cook-Torrance PBR |
 | Transparent | Transparent Mesh、共享 Depth | HDR 合成 | 保持排序与 Alpha Blend，走 Forward PBR |
 | Bloom | HDR | 半分辨率 RGBA16F | 亮度提取与 Ping-Pong Blur |
@@ -38,7 +38,17 @@ flowchart LR
 | Albedo / Metallic | RGBA8 | RGB = Base Color，A = Metallic |
 | Depth | Depth24 | 深度测试、透明 Forward Pass 与调试视图共享 |
 
-ImGui 的 `Output Buffer` 可以全屏查看 World Position、World Normal、Albedo、AO、Roughness、Metallic、SSAO、Bloom 和 Depth；`GBuffer Inspector` 可以同时查看缩略图。
+ImGui 的 `Output Buffer` 可以全屏查看 World Position、World Normal、Albedo、AO、Roughness、Metallic、SSAO Only、Bloom 和 Depth；`GBuffer Inspector` 可以同时查看缩略图。`Pipeline` 可在 `Deferred + SSAO` 与独立的 `Forward PBR` 之间切换。
+
+## SSAO-only Gallery
+
+![SSAO-only gallery](assets/showcase_ssao_only_4k.png)
+
+第 9 个场景使用墙角、台阶、底座、球体和贴墙物体构造接触遮蔽测试。进入场景后自动选择 Deferred 管线与 SSAO-only 输出：AO 在半分辨率下使用 64 个半球样本计算，再以 World Position 和 World Normal 为约束执行 7 x 7 双边滤波和全分辨率联合上采样；最终灰度调试输出使用 FXAA 平滑单采样 GBuffer 的几何边缘。白色表示无遮挡，暗部集中在接触点、缝隙和墙角。
+
+```powershell
+.\Debug\openglStudy.exe --fullscreen --showcase=9 --no-ui --screenshot=verification\ssao_gallery_4k.png
+```
 
 ## 性能统计
 
@@ -68,10 +78,10 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 
 | 指标 | Reference | Optimized | 降幅 |
 | --- | ---: | ---: | ---: |
-| CPU Frame | 381.355 ms | 23.594 ms | 93.81% |
-| GPU Frame | 179.607 ms | 0.628 ms | 99.65% |
-| Draw Calls | 10,232 | 27 | 99.74% |
-| Triangles | 49,025,778 | 4,170,166 | 91.49% |
+| CPU Frame | 381.087 ms | 25.385 ms | 93.34% |
+| GPU Frame | 179.753 ms | 0.670 ms | 99.63% |
+| Draw Calls | 10,233 | 28 | 99.73% |
+| Triangles | 49,025,780 | 4,170,168 | 91.49% |
 
 ## 操作入口
 

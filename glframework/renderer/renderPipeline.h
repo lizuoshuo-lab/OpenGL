@@ -65,7 +65,7 @@ struct PipelineSettings {
 	float ssaoRadius{ 0.55f };
 	float ssaoBias{ 0.025f };
 	float ssaoStrength{ 1.0f };
-	int ssaoSamples{ 16 };
+	int ssaoSamples{ 32 };
 	float bloomThreshold{ 1.0f };
 	float bloomIntensity{ 0.12f };
 	int bloomIterations{ 4 };
@@ -179,6 +179,7 @@ private:
 	Shader* mGBufferShader{ nullptr };
 	Shader* mSsaoShader{ nullptr };
 	Shader* mSsaoBlurShader{ nullptr };
+	Shader* mSsaoUpsampleShader{ nullptr };
 	Shader* mLightingShader{ nullptr };
 	Shader* mBloomExtractShader{ nullptr };
 	Shader* mGaussianBlurShader{ nullptr };
@@ -198,13 +199,15 @@ private:
 	GLuint mSsaoTexture{ 0 };
 	GLuint mSsaoBlurFbo{ 0 };
 	GLuint mSsaoBlurTexture{ 0 };
+	GLuint mSsaoUpsampleFbo{ 0 };
+	GLuint mSsaoUpsampleTexture{ 0 };
 	GLuint mBloomExtractFbo{ 0 };
 	GLuint mBloomExtractTexture{ 0 };
 	std::array<GLuint, 2> mBloomFbos{};
 	std::array<GLuint, 2> mBloomTextures{};
 	GLuint mBloomResultTexture{ 0 };
 	GLuint mSsaoNoiseTexture{ 0 };
-	std::array<glm::vec3, 32> mSsaoKernel{};
+	std::array<glm::vec3, 64> mSsaoKernel{};
 	Framebuffer* mForwardMsaa{ nullptr };
 	Framebuffer* mForwardResolve{ nullptr };
 

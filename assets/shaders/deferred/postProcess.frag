@@ -13,6 +13,7 @@ uniform sampler2D ssaoTexture;
 uniform sampler2D depthTexture;
 uniform float exposure;
 uniform float bloomIntensity;
+uniform float ssaoStrength;
 uniform float cameraNear;
 uniform float cameraFar;
 uniform int bloomEnabled;
@@ -34,6 +35,50 @@ float linearizeDepth(float depth)
 	float ndc = depth * 2.0 - 1.0;
 	return (2.0 * cameraNear * cameraFar) /
 		(cameraFar + cameraNear - ndc * (cameraFar - cameraNear));
+}
+
+float sampleSsao(vec2 sampleUv)
+{
+	float occlusion = clamp(texture(ssaoTexture, sampleUv).r, 0.0, 1.0);
+	return pow(occlusion, max(ssaoStrength, 0.01));
+}
+
+float fxaaSsao(vec2 sampleUv)
+{
+	vec2 texel = 1.0 / vec2(textureSize(ssaoTexture, 0));
+	float northWest = sampleSsao(sampleUv + vec2(-1.0, 1.0) * texel);
+	float northEast = sampleSsao(sampleUv + vec2(1.0, 1.0) * texel);
+	float southWest = sampleSsao(sampleUv + vec2(-1.0, -1.0) * texel);
+	float southEast = sampleSsao(sampleUv + vec2(1.0, -1.0) * texel);
+	float center = sampleSsao(sampleUv);
+	float minimum = min(center, min(min(northWest, northEast), min(southWest, southEast)));
+	float maximum = max(center, max(max(northWest, northEast), max(southWest, southEast)));
+
+	vec2 direction = vec2(
+		-((northWest + northEast) - (southWest + southEast)),
+		(northWest + southWest) - (northEast + southEast)
+	);
+	float directionReduce = max(
+		(northWest + northEast + southWest + southEast) * 0.03125,
+		1.0 / 128.0
+	);
+	float inverseMinimum = 1.0 /
+		(min(abs(direction.x), abs(direction.y)) + directionReduce);
+	direction = clamp(
+		direction * inverseMinimum,
+		vec2(-8.0),
+		vec2(8.0)
+	) * texel;
+
+	float resultA = 0.5 * (
+		sampleSsao(sampleUv + direction * (1.0 / 3.0 - 0.5)) +
+		sampleSsao(sampleUv + direction * (2.0 / 3.0 - 0.5))
+	);
+	float resultB = resultA * 0.5 + 0.25 * (
+		sampleSsao(sampleUv - direction * 0.5) +
+		sampleSsao(sampleUv + direction * 0.5)
+	);
+	return resultB < minimum || resultB > maximum ? resultA : resultB;
 }
 
 void main()
@@ -59,7 +104,7 @@ void main()
 			debugColor = vec3(texture(gAlbedoMetallic, uv).a);
 		}
 		else if (debugView == 7) {
-			debugColor = vec3(texture(ssaoTexture, uv).r);
+			debugColor = vec3(fxaaSsao(uv));
 		}
 		else if (debugView == 8) {
 			debugColor = acesApproximation(texture(bloomTexture, uv).rgb * exposure);

@@ -65,6 +65,11 @@ struct ShowcaseEntry {
 std::vector<ShowcaseEntry> showcases;
 int selectedShowcase = 0;
 int optimizationShowcaseIndex = -1;
+int ssaoShowcaseIndex = -1;
+bool ssaoRestoreStateValid = false;
+PipelineMode ssaoRestoreMode = PipelineMode::Deferred;
+PipelineDebugView ssaoRestoreDebugView = PipelineDebugView::Final;
+bool ssaoRestoreBloomEnabled = true;
 bool autoRotateShowcase = true;
 float showcaseRotation = 0.0f;
 float showcaseScale = 1.0f;
@@ -417,6 +422,7 @@ void selectShowcase(int index) {
 		optimizationBenchmark.cancel(renderPipeline->settings());
 	}
 
+	const bool previousSsaoScene = selectedShowcase == ssaoShowcaseIndex;
 	selectedShowcase = std::clamp(index, 0, static_cast<int>(showcases.size()) - 1);
 	for (int i = 0; i < static_cast<int>(showcases.size()); ++i) {
 		showcases[i].object->setVisible(i == selectedShowcase);
@@ -428,11 +434,12 @@ void selectShowcase(int index) {
 	showcases[selectedShowcase].object->setScale(glm::vec3(1.0f));
 	const bool shadowScene = showcases[selectedShowcase].supportsSoftShadow;
 	const bool outdoorScene = selectedShowcase == optimizationShowcaseIndex;
+	const bool ssaoScene = selectedShowcase == ssaoShowcaseIndex;
 	const bool chessShadowScene = shadowScene && !outdoorScene;
 	if (PerspectiveCamera* perspective = dynamic_cast<PerspectiveCamera*>(camera)) {
-		perspective->mFovy = outdoorScene ? 44.0f : 60.0f;
+		perspective->mFovy = outdoorScene ? 44.0f : (ssaoScene ? 48.0f : 60.0f);
 	}
-	autoRotateShowcase = !shadowScene && selectedShowcase != optimizationShowcaseIndex;
+	autoRotateShowcase = !shadowScene && !outdoorScene && !ssaoScene;
 	lightEnabled[0] = true;
 	lightEnabled[1] = outdoorScene || !shadowScene;
 	lightUiPower[0] = outdoorScene ? 340000.0f : (chessShadowScene ? 200.0f : 80.0f);
@@ -479,8 +486,28 @@ void selectShowcase(int index) {
 		PipelineSettings& settings = renderPipeline->settings();
 		settings.exposure = 1.0f;
 		settings.bloomIntensity = outdoorScene ? 0.05f : 0.12f;
-		settings.ssaoRadius = outdoorScene ? 0.82f : 0.55f;
-		settings.ssaoStrength = outdoorScene ? 1.05f : 1.0f;
+		settings.ssaoEnabled = true;
+		settings.ssaoSamples = ssaoScene ? 64 : 32;
+		settings.ssaoRadius = ssaoScene ? 1.0f : (outdoorScene ? 0.82f : 0.55f);
+		settings.ssaoBias = ssaoScene ? 0.025f : settings.ssaoBias;
+		settings.ssaoStrength = ssaoScene ? 1.55f : (outdoorScene ? 1.05f : 1.0f);
+		if (ssaoScene) {
+			if (!previousSsaoScene) {
+				ssaoRestoreMode = settings.mode;
+				ssaoRestoreDebugView = settings.debugView;
+				ssaoRestoreBloomEnabled = settings.bloomEnabled;
+				ssaoRestoreStateValid = true;
+			}
+			settings.mode = PipelineMode::Deferred;
+			settings.debugView = PipelineDebugView::Ssao;
+			settings.bloomEnabled = false;
+		}
+		else if (previousSsaoScene && ssaoRestoreStateValid) {
+			settings.mode = ssaoRestoreMode;
+			settings.debugView = ssaoRestoreDebugView;
+			settings.bloomEnabled = ssaoRestoreBloomEnabled;
+			ssaoRestoreStateValid = false;
+		}
 	}
 	resetCamera();
 }
@@ -509,6 +536,126 @@ void addShowcase(
 		cameraTarget
 	});
 	scene->addChild(object);
+}
+
+PbrMaterial* createSsaoMaterial(
+	Texture* albedo,
+	Texture* normal,
+	Texture* scalar,
+	const glm::vec4& tint
+) {
+	PbrMaterial* material = new PbrMaterial();
+	material->mAlbedo = albedo;
+	material->mNormal = normal;
+	material->mMetallic = scalar;
+	material->mRoughness = scalar;
+	material->mAo = scalar;
+	material->mBaseColorFactor = tint;
+	material->mMetallicScale = 0.0f;
+	material->mRoughnessScale = 0.88f;
+	material->mAoScale = 1.0f;
+	material->mNormalStrength = 0.0f;
+	if (pbrMaterial != nullptr) {
+		material->mIrradianceMap = pbrMaterial->mIrradianceMap;
+		material->mPrefilterMap = pbrMaterial->mPrefilterMap;
+		material->mBrdfLut = pbrMaterial->mBrdfLut;
+	}
+	materialMatrixMaterials.push_back(material);
+	return material;
+}
+
+Mesh* addSsaoPrimitive(
+	Object* root,
+	Geometry* geometry,
+	PbrMaterial* material,
+	const glm::vec3& position,
+	const glm::vec3& scale,
+	const glm::vec3& rotation = glm::vec3(0.0f)
+) {
+	Mesh* mesh = new Mesh(geometry, material);
+	mesh->setPosition(position);
+	mesh->setScale(scale);
+	mesh->setAngleX(rotation.x);
+	mesh->setAngleY(rotation.y);
+	mesh->setAngleZ(rotation.z);
+	root->addChild(mesh);
+	return mesh;
+}
+
+Object* createSsaoGallery(
+	Texture* albedo,
+	Texture* normal,
+	Texture* scalar
+) {
+	Object* root = new Object();
+	Geometry* box = Geometry::createBox(1.0f);
+	Geometry* sphere = Geometry::createSphere(0.5f, 48, 48);
+	PbrMaterial* shellMaterial = createSsaoMaterial(
+		albedo,
+		normal,
+		scalar,
+		glm::vec4(0.72f, 0.74f, 0.78f, 1.0f)
+	);
+	PbrMaterial* stepMaterial = createSsaoMaterial(
+		albedo,
+		normal,
+		scalar,
+		glm::vec4(0.52f, 0.56f, 0.62f, 1.0f)
+	);
+	PbrMaterial* objectMaterial = createSsaoMaterial(
+		albedo,
+		normal,
+		scalar,
+		glm::vec4(0.82f, 0.58f, 0.36f, 1.0f)
+	);
+
+	const float floorTop = -2.225f;
+	addSsaoPrimitive(root, box, shellMaterial, { 0.0f, -2.4f, 0.0f }, { 12.0f, 0.35f, 12.0f });
+	addSsaoPrimitive(root, box, shellMaterial, { 0.0f, 0.9f, -5.8f }, { 12.0f, 7.0f, 0.35f });
+	addSsaoPrimitive(root, box, shellMaterial, { -5.8f, 0.9f, 0.0f }, { 0.35f, 7.0f, 12.0f });
+
+	for (int index = 0; index < 5; ++index) {
+		const float height = 0.42f * static_cast<float>(index + 1);
+		addSsaoPrimitive(
+			root,
+			box,
+			stepMaterial,
+			{ 0.0f, floorTop + height * 0.5f, 2.3f - index * 1.08f },
+			{ 5.4f - index * 0.55f, height, 1.25f }
+		);
+	}
+
+	addSsaoPrimitive(root, box, stepMaterial, { -3.75f, -1.225f, -2.85f }, { 1.45f, 2.0f, 1.45f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { -3.75f, 0.67f, -2.85f }, { 1.8f, 1.8f, 1.8f });
+	addSsaoPrimitive(root, box, stepMaterial, { 3.65f, -1.525f, -3.15f }, { 1.65f, 1.4f, 1.65f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { 3.65f, -0.12f, -3.15f }, { 1.35f, 1.35f, 1.35f });
+
+	addSsaoPrimitive(root, sphere, objectMaterial, { 3.25f, -1.32f, 2.55f }, { 1.8f, 1.8f, 1.8f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { 4.55f, -1.58f, 1.95f }, { 1.28f, 1.28f, 1.28f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { 2.25f, -1.72f, 3.25f }, { 1.0f, 1.0f, 1.0f });
+	addSsaoPrimitive(
+		root,
+		box,
+		objectMaterial,
+		{ 3.25f, -1.38f, -0.15f },
+		{ 1.55f, 1.55f, 1.55f },
+		{ 0.0f, 28.0f, 8.0f }
+	);
+	addSsaoPrimitive(
+		root,
+		box,
+		objectMaterial,
+		{ -4.9f, -0.82f, 1.55f },
+		{ 1.25f, 2.8f, 1.25f },
+		{ 0.0f, -12.0f, 0.0f }
+	);
+
+	addSsaoPrimitive(root, box, stepMaterial, { -2.45f, 0.45f, -5.05f }, { 3.35f, 0.38f, 1.2f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { -2.45f, 1.15f, -4.85f }, { 1.05f, 1.05f, 1.05f });
+	addSsaoPrimitive(root, box, stepMaterial, { 4.55f, 0.05f, -5.0f }, { 1.15f, 4.55f, 1.2f });
+	addSsaoPrimitive(root, sphere, objectMaterial, { 4.55f, 2.75f, -4.9f }, { 1.25f, 1.25f, 1.25f });
+
+	return root;
 }
 
 void updateDemoLoop(double currentTime) {
@@ -892,6 +1039,26 @@ void prepare() {
 		optimizationCameraCenter
 	);
 
+	Texture* ssaoAlbedo = Texture::createSolidTexture(
+		"ssao-gallery-albedo",
+		210,
+		214,
+		220,
+		255,
+		GL_SRGB_ALPHA
+	);
+	Object* ssaoGallery = createSsaoGallery(ssaoAlbedo, matrixNormal, matrixWhite);
+	ssaoShowcaseIndex = static_cast<int>(showcases.size());
+	addShowcase(
+		"SSAO Gallery",
+		"Procedural contact-occlusion test scene / Deferred SSAO",
+		ssaoGallery,
+		3,
+		false,
+		glm::vec3(7.6f, 3.2f, 10.0f),
+		glm::vec3(-0.2f, -0.7f, -1.0f)
+	);
+
 	selectShowcase(std::min(6, static_cast<int>(showcases.size()) - 1));
 	scene->addChild(environmentMesh);
 
@@ -935,7 +1102,7 @@ void drawPipelinePanel() {
 	}
 
 	PipelineSettings& settings = renderPipeline->settings();
-	const char* modes[] = { "Deferred PBR", "Forward Reference" };
+	const char* modes[] = { "Deferred + SSAO", "Forward PBR" };
 	int mode = static_cast<int>(settings.mode);
 	if (ImGui::Combo("Pipeline", &mode, modes, IM_ARRAYSIZE(modes))) {
 		settings.mode = static_cast<PipelineMode>(mode);
@@ -948,7 +1115,7 @@ void drawPipelinePanel() {
 		"Material AO",
 		"Roughness",
 		"Metallic",
-		"SSAO",
+		"SSAO Only",
 		"Bloom",
 		"Depth"
 	};
@@ -970,11 +1137,23 @@ void drawPipelinePanel() {
 	ImGui::Checkbox("AABB", &settings.showBounds);
 
 	if (ImGui::TreeNodeEx("SSAO", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (settings.mode == PipelineMode::ForwardReference) {
+			ImGui::TextDisabled("Available in the deferred path");
+		}
 		ImGui::Checkbox("Enabled##SSAO", &settings.ssaoEnabled);
-		ImGui::SliderInt("Samples", &settings.ssaoSamples, 4, 32);
+		ImGui::SliderInt("Samples", &settings.ssaoSamples, 8, 64);
 		ImGui::SliderFloat("Radius", &settings.ssaoRadius, 0.1f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Bias", &settings.ssaoBias, 0.001f, 0.1f, "%.3f");
 		ImGui::SliderFloat("Strength", &settings.ssaoStrength, 0.0f, 2.0f, "%.2f");
+		if (ImGui::Button("View SSAO Only")) {
+			settings.mode = PipelineMode::Deferred;
+			settings.ssaoEnabled = true;
+			settings.debugView = PipelineDebugView::Ssao;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("View Lit Result")) {
+			settings.debugView = PipelineDebugView::Final;
+		}
 		ImGui::TreePop();
 	}
 	if (ImGui::TreeNodeEx("Bloom", ImGuiTreeNodeFlags_DefaultOpen)) {
