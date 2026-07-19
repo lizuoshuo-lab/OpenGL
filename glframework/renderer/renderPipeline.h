@@ -174,6 +174,8 @@ private:
 	int mHeight{ 0 };
 	int mHalfWidth{ 0 };
 	int mHalfHeight{ 0 };
+	int mAuroraWidth{ 0 };
+	int mAuroraHeight{ 0 };
 	bool mUiPassActive{ false };
 
 	Shader* mGBufferShader{ nullptr };
@@ -185,6 +187,7 @@ private:
 	Shader* mGaussianBlurShader{ nullptr };
 	Shader* mPostProcessShader{ nullptr };
 	Shader* mDebugBoundsShader{ nullptr };
+	Shader* mAuroraCompositeShader{ nullptr };
 	Geometry* mFullscreenQuad{ nullptr };
 	Geometry* mDebugBox{ nullptr };
 
@@ -195,6 +198,8 @@ private:
 	GLuint mGDepth{ 0 };
 	GLuint mHdrFbo{ 0 };
 	GLuint mHdrColor{ 0 };
+	GLuint mAuroraFbo{ 0 };
+	GLuint mAuroraTexture{ 0 };
 	GLuint mSsaoFbo{ 0 };
 	GLuint mSsaoTexture{ 0 };
 	GLuint mSsaoBlurFbo{ 0 };

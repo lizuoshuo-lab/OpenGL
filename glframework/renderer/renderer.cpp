@@ -13,6 +13,7 @@
 #include "../material/advanced/phongShadowMaterial.h"
 #include "../material/advanced/phongCSMShadowMaterial.h"
 #include "../material/advanced/pbrMaterial.h"
+#include "../material/auroraMaterial.h"
 
 
 #include "../mesh/instancedMesh.h"
@@ -42,6 +43,7 @@ Renderer::Renderer() {
 	mPhongShadowShader = new Shader("assets/shaders/advanced/phongShadow.vert", "assets/shaders/advanced/phongShadow.frag");
 	mPhongCSMShadowShader = new Shader("assets/shaders/advanced/phongCSMShadow.vert", "assets/shaders/advanced/phongCSMShadow.frag");
 	mPbrShader = new Shader("assets/shaders/advanced/pbr/pbr.vert", "assets/shaders/advanced/pbr/pbr.frag");
+	mAuroraShader = new Shader("assets/shaders/aurora.vert", "assets/shaders/aurora.frag");
 
 }
 
@@ -61,6 +63,7 @@ Renderer::~Renderer() {
 	delete mPhongShadowShader;
 	delete mPhongCSMShadowShader;
 	delete mPbrShader;
+	delete mAuroraShader;
 }
 
 void Renderer::recordDraw(const Geometry* geometry, std::uint64_t instanceCount) {
@@ -219,6 +222,9 @@ Shader* Renderer::pickShader(MaterialType type) {
 		break;
 	case MaterialType::PbrMaterial:
 		result = mPbrShader;
+		break;
+	case MaterialType::AuroraMaterial:
+		result = mAuroraShader;
 		break;
 
 	default:
@@ -483,7 +489,33 @@ void Renderer::renderObject(
 			cubeMat->mDiffuse->bind();
 		}
 										break;
-		
+
+		case MaterialType::AuroraMaterial: {
+			AuroraMaterial* auroraMat = static_cast<AuroraMaterial*>(material);
+			shader->setMatrix4x4("viewMatrix", camera->getViewMatrix());
+			shader->setMatrix4x4("projectionMatrix", camera->getProjectionMatrix());
+			shader->setVector3("cameraPosition", camera->mPosition);
+			shader->setFloat("timeSeconds", auroraMat->mTimeSeconds);
+			shader->setFloat("intensity", auroraMat->mIntensity);
+			shader->setFloat("motionSpeed", auroraMat->mMotionSpeed);
+			shader->setFloat("lowerHeight", auroraMat->mLowerHeight);
+			shader->setFloat("upperHeight", auroraMat->mUpperHeight);
+			shader->setFloat("curtainDistance", auroraMat->mCurtainDistance);
+			shader->setFloat("curtainSpread", auroraMat->mCurtainSpread);
+			shader->setFloat("curtainSpan", auroraMat->mCurtainSpan);
+			shader->setFloat("curtainThickness", auroraMat->mCurtainThickness);
+			shader->setFloat("foldScale", auroraMat->mFoldScale);
+			shader->setFloat("foldStrength", auroraMat->mFoldStrength);
+			shader->setFloat("turbulence", auroraMat->mTurbulence);
+			shader->setFloat("redEmission", auroraMat->mRedEmission);
+			shader->setFloat("blueEmission", auroraMat->mBlueEmission);
+			shader->setInt("raymarchSteps", auroraMat->mRaymarchSteps);
+			shader->setVector3("greenColor", auroraMat->mGreenColor);
+			shader->setVector3("redColor", auroraMat->mRedColor);
+			shader->setVector3("blueColor", auroraMat->mBlueColor);
+		}
+										break;
+
 		case MaterialType::PbrMaterial: {
 			PbrMaterial* pbrMat = (PbrMaterial*)material;
 

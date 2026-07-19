@@ -108,6 +108,7 @@ RenderPipeline::~RenderPipeline() {
 	delete mGaussianBlurShader;
 	delete mPostProcessShader;
 	delete mDebugBoundsShader;
+	delete mAuroraCompositeShader;
 }
 
 void RenderPipeline::createShaders() {
@@ -146,6 +147,10 @@ void RenderPipeline::createShaders() {
 	mDebugBoundsShader = new Shader(
 		"assets/shaders/deferred/debugBounds.vert",
 		"assets/shaders/deferred/debugBounds.frag"
+	);
+	mAuroraCompositeShader = new Shader(
+		"assets/shaders/screen.vert",
+		"assets/shaders/deferred/auroraComposite.frag"
 	);
 }
 
@@ -205,6 +210,8 @@ void RenderPipeline::checkFramebuffer(const char* name) const {
 void RenderPipeline::createRenderTargets() {
 	mHalfWidth = std::max(1, mWidth / 2);
 	mHalfHeight = std::max(1, mHeight / 2);
+	mAuroraWidth = std::max(1, mWidth / 4);
+	mAuroraHeight = std::max(1, mHeight / 4);
 
 	glGenFramebuffers(1, &mGBufferFbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, mGBufferFbo);
@@ -230,6 +237,26 @@ void RenderPipeline::createRenderTargets() {
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mHdrColor, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mGDepth, 0);
 	checkFramebuffer("HDR Lighting");
+
+	glGenFramebuffers(1, &mAuroraFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, mAuroraFbo);
+	createTexture2D(
+		mAuroraTexture,
+		GL_RGBA16F,
+		GL_RGBA,
+		GL_FLOAT,
+		mAuroraWidth,
+		mAuroraHeight,
+		GL_LINEAR
+	);
+	glFramebufferTexture2D(
+		GL_FRAMEBUFFER,
+		GL_COLOR_ATTACHMENT0,
+		GL_TEXTURE_2D,
+		mAuroraTexture,
+		0
+	);
+	checkFramebuffer("Aurora Volume");
 
 	glGenFramebuffers(1, &mSsaoFbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, mSsaoFbo);
@@ -287,11 +314,13 @@ void RenderPipeline::createRenderTargets() {
 
 	labelObject(GL_FRAMEBUFFER, mGBufferFbo, "GBuffer Pass FBO");
 	labelObject(GL_FRAMEBUFFER, mHdrFbo, "Lighting Pass FBO");
+	labelObject(GL_FRAMEBUFFER, mAuroraFbo, "Aurora Quarter Resolution FBO");
 	labelObject(GL_TEXTURE, mGPositionAo, "GBuffer Position AO");
 	labelObject(GL_TEXTURE, mGNormalRoughness, "GBuffer Normal Roughness");
 	labelObject(GL_TEXTURE, mGAlbedoMetallic, "GBuffer Albedo Metallic");
 	labelObject(GL_TEXTURE, mGDepth, "GBuffer Depth");
 	labelObject(GL_TEXTURE, mHdrColor, "HDR Lighting");
+	labelObject(GL_TEXTURE, mAuroraTexture, "Aurora Quarter Resolution HDR");
 	labelObject(GL_TEXTURE, mSsaoBlurTexture, "SSAO Filtered Half Resolution");
 	labelObject(GL_TEXTURE, mSsaoUpsampleTexture, "SSAO Full Resolution");
 	labelObject(GL_TEXTURE, mBloomExtractTexture, "Bloom Bright Pass");
@@ -306,12 +335,13 @@ void RenderPipeline::destroyRenderTargets() {
 	const GLuint framebuffers[] = {
 		mGBufferFbo,
 		mHdrFbo,
+		mAuroraFbo,
 		mSsaoFbo,
 		mSsaoBlurFbo,
 		mSsaoUpsampleFbo,
 		mBloomExtractFbo
 	};
-	glDeleteFramebuffers(6, framebuffers);
+	glDeleteFramebuffers(7, framebuffers);
 	glDeleteFramebuffers(static_cast<GLsizei>(mBloomFbos.size()), mBloomFbos.data());
 
 	const GLuint textures[] = {
@@ -320,16 +350,18 @@ void RenderPipeline::destroyRenderTargets() {
 		mGAlbedoMetallic,
 		mGDepth,
 		mHdrColor,
+		mAuroraTexture,
 		mSsaoTexture,
 		mSsaoBlurTexture,
 		mSsaoUpsampleTexture,
 		mBloomExtractTexture
 	};
-	glDeleteTextures(9, textures);
+	glDeleteTextures(10, textures);
 	glDeleteTextures(static_cast<GLsizei>(mBloomTextures.size()), mBloomTextures.data());
 
 	mGBufferFbo = 0;
 	mHdrFbo = 0;
+	mAuroraFbo = 0;
 	mSsaoFbo = 0;
 	mSsaoBlurFbo = 0;
 	mSsaoUpsampleFbo = 0;
@@ -340,6 +372,7 @@ void RenderPipeline::destroyRenderTargets() {
 	mGAlbedoMetallic = 0;
 	mGDepth = 0;
 	mHdrColor = 0;
+	mAuroraTexture = 0;
 	mSsaoTexture = 0;
 	mSsaoBlurTexture = 0;
 	mSsaoUpsampleTexture = 0;
@@ -554,7 +587,8 @@ void RenderPipeline::collectObject(
 				);
 				geometry = mesh->mGeometry;
 
-				const bool canCull = material->mType != MaterialType::CubeMaterial;
+				const bool canCull = material->mType != MaterialType::CubeMaterial &&
+					material->mType != MaterialType::AuroraMaterial;
 				const bool visible = !mSettings.frustumCulling || !canCull ||
 					frustum.intersectsAabb(
 						geometry->getMinBounds(),
@@ -944,8 +978,45 @@ void RenderPipeline::executeTransparentPass(
 		for (Mesh* mesh : mForwardOpaque) {
 			mRenderer->renderObject(mesh, camera, pointLights);
 		}
+		bool hasAurora = false;
 		for (Mesh* mesh : mTransparent) {
-			mRenderer->renderObject(mesh, camera, pointLights);
+			if (mesh->mMaterial->mType == MaterialType::AuroraMaterial) {
+				hasAurora = true;
+			}
+			else {
+				mRenderer->renderObject(mesh, camera, pointLights);
+			}
+		}
+		if (hasAurora) {
+			const GLfloat transparentBlack[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			glBindFramebuffer(GL_FRAMEBUFFER, mAuroraFbo);
+			glViewport(0, 0, mAuroraWidth, mAuroraHeight);
+			glClearBufferfv(GL_COLOR, 0, transparentBlack);
+			for (Mesh* mesh : mTransparent) {
+				if (mesh->mMaterial->mType != MaterialType::AuroraMaterial) {
+					continue;
+				}
+				const bool depthTest = mesh->mMaterial->mDepthTest;
+				mesh->mMaterial->mDepthTest = false;
+				mRenderer->renderObject(mesh, camera, pointLights);
+				mesh->mMaterial->mDepthTest = depthTest;
+			}
+
+			glBindFramebuffer(GL_FRAMEBUFFER, mHdrFbo);
+			glViewport(0, 0, mWidth, mHeight);
+			glDisable(GL_DEPTH_TEST);
+			glDepthMask(GL_FALSE);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_ONE, GL_ONE);
+			mAuroraCompositeShader->begin();
+			mAuroraCompositeShader->setInt("auroraTexture", 0);
+			mAuroraCompositeShader->setInt("depthTexture", 1);
+			bindTexture2D(mAuroraTexture, 0);
+			bindTexture2D(mGDepth, 1);
+			drawFullscreen();
+			mAuroraCompositeShader->end();
+			glDisable(GL_BLEND);
+			glDepthMask(GL_TRUE);
 		}
 		if (mSettings.showBounds) {
 			drawDebugBounds(camera);
@@ -980,7 +1051,8 @@ void RenderPipeline::drawDebugBounds(Camera* camera) {
 	glBindVertexArray(mDebugBox->getVao());
 	for (Mesh* mesh : mVisibleMeshes) {
 		if (mesh->getType() == ObjectType::InstancedMesh || mesh->mGeometry == nullptr ||
-			mesh->mMaterial->mType == MaterialType::CubeMaterial) {
+			mesh->mMaterial->mType == MaterialType::CubeMaterial ||
+			mesh->mMaterial->mType == MaterialType::AuroraMaterial) {
 			continue;
 		}
 		const glm::vec3 minimum = mesh->mGeometry->getMinBounds();
@@ -1134,7 +1206,10 @@ std::size_t RenderPipeline::calculateRenderTargetBytes() const {
 		static_cast<std::size_t>(mWidth) * static_cast<std::size_t>(mHeight);
 	const std::size_t halfPixels =
 		static_cast<std::size_t>(mHalfWidth) * static_cast<std::size_t>(mHalfHeight);
-	std::size_t bytes = fullPixels * 34 + halfPixels * 28 + 16 * 3 * sizeof(float);
+	const std::size_t auroraPixels =
+		static_cast<std::size_t>(mAuroraWidth) * static_cast<std::size_t>(mAuroraHeight);
+	std::size_t bytes = fullPixels * 34 + halfPixels * 28 + auroraPixels * 8 +
+		16 * 3 * sizeof(float);
 
 	const Framebuffer* forwardTargets[] = { mForwardMsaa, mForwardResolve };
 	for (const Framebuffer* target : forwardTargets) {

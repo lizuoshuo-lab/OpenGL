@@ -20,6 +20,7 @@
 #include "glframework/geometry.h"
 #include "glframework/light/pointLight.h"
 #include "glframework/material/advanced/pbrMaterial.h"
+#include "glframework/material/auroraMaterial.h"
 #include "glframework/material/cubeMaterial.h"
 #include "glframework/mesh/mesh.h"
 #include "glframework/renderer/renderPipeline.h"
@@ -40,6 +41,7 @@ PbrMaterial* pbrMaterial = nullptr;
 OptimizationShowcase* optimizationShowcase = nullptr;
 SkinnedModel* skeletalShowcase = nullptr;
 CubeMaterial* environmentMaterial = nullptr;
+AuroraMaterial* auroraMaterial = nullptr;
 Texture* studioEnvironmentTexture = nullptr;
 Texture* studioIrradianceMap = nullptr;
 Texture* studioPrefilterMap = nullptr;
@@ -70,6 +72,7 @@ int selectedShowcase = 0;
 int optimizationShowcaseIndex = -1;
 int ssaoShowcaseIndex = -1;
 int skeletalShowcaseIndex = -1;
+int auroraShowcaseIndex = -1;
 bool ssaoRestoreStateValid = false;
 PipelineMode ssaoRestoreMode = PipelineMode::Deferred;
 PipelineDebugView ssaoRestoreDebugView = PipelineDebugView::Final;
@@ -440,46 +443,58 @@ void selectShowcase(int index) {
 	const bool outdoorScene = selectedShowcase == optimizationShowcaseIndex;
 	const bool ssaoScene = selectedShowcase == ssaoShowcaseIndex;
 	const bool skeletalScene = selectedShowcase == skeletalShowcaseIndex;
+	const bool auroraScene = selectedShowcase == auroraShowcaseIndex;
 	const bool chessShadowScene = shadowScene && !outdoorScene && !skeletalScene;
 	if (PerspectiveCamera* perspective = dynamic_cast<PerspectiveCamera*>(camera)) {
 		perspective->mFovy = outdoorScene
 			? 44.0f
-			: (ssaoScene ? 48.0f : (skeletalScene ? 46.0f : 60.0f));
+			: (ssaoScene ? 48.0f : (skeletalScene ? 46.0f : (auroraScene ? 58.0f : 60.0f)));
 	}
-	autoRotateShowcase = !shadowScene && !outdoorScene && !ssaoScene && !skeletalScene;
+	autoRotateShowcase = !shadowScene && !outdoorScene && !ssaoScene &&
+		!skeletalScene && !auroraScene;
 	lightEnabled[0] = true;
-	lightEnabled[1] = outdoorScene || !shadowScene || skeletalScene;
+	lightEnabled[1] = outdoorScene || !shadowScene || skeletalScene || auroraScene;
 	lightUiPower[0] = outdoorScene
 		? 340000.0f
-		: (chessShadowScene ? 200.0f : (skeletalScene ? 115.0f : 80.0f));
-	lightUiPower[1] = outdoorScene ? 85000.0f : (skeletalScene ? 55.0f : 80.0f);
+		: (chessShadowScene ? 200.0f : (skeletalScene ? 115.0f : (auroraScene ? 60.0f : 80.0f)));
+	lightUiPower[1] = outdoorScene
+		? 85000.0f
+		: (skeletalScene ? 55.0f : (auroraScene ? 18.0f : 80.0f));
 	lightUiTint[0] = outdoorScene
 		? glm::vec3(1.0f, 0.80f, 0.62f)
-		: (skeletalScene ? glm::vec3(1.0f, 0.84f, 0.70f) : glm::vec3(1.0f));
+		: (skeletalScene
+			? glm::vec3(1.0f, 0.84f, 0.70f)
+			: (auroraScene ? glm::vec3(0.26f, 1.0f, 0.62f) : glm::vec3(1.0f)));
 	lightUiTint[1] = outdoorScene
 		? glm::vec3(0.28f, 0.48f, 1.0f)
-		: (skeletalScene ? glm::vec3(0.45f, 0.65f, 1.0f) : glm::vec3(1.0f));
+		: (skeletalScene
+			? glm::vec3(0.45f, 0.65f, 1.0f)
+			: (auroraScene ? glm::vec3(0.28f, 0.42f, 1.0f) : glm::vec3(1.0f)));
 	if (!pointLights.empty()) {
 		pointLights[0]->setPosition(
 			outdoorScene
 				? glm::vec3(-240.0f, 160.0f, 300.0f)
-				: (skeletalScene ? glm::vec3(-3.8f, 5.2f, 5.0f) : glm::vec3(-4.5f, 6.5f, 3.0f))
+				: (skeletalScene
+					? glm::vec3(-3.8f, 5.2f, 5.0f)
+					: (auroraScene ? glm::vec3(-12.0f, 9.0f, 4.0f) : glm::vec3(-4.5f, 6.5f, 3.0f)))
 		);
 	}
 	if (pointLights.size() > 1) {
 		pointLights[1]->setPosition(
 			outdoorScene
 				? glm::vec3(220.0f, -120.0f, 180.0f)
-				: (skeletalScene ? glm::vec3(4.5f, 2.0f, -4.0f) : glm::vec3(5.0f, 5.5f, -5.0f))
+				: (skeletalScene
+					? glm::vec3(4.5f, 2.0f, -4.0f)
+					: (auroraScene ? glm::vec3(14.0f, 4.0f, -18.0f) : glm::vec3(5.0f, 5.5f, -5.0f)))
 		);
 	}
 	if (pbrMaterial != nullptr) {
 		pbrMaterial->mEnvIntensity = chessShadowScene
 			? 0.4f
-			: (outdoorScene ? 0.38f : (skeletalScene ? 0.82f : 1.0f));
-		pbrMaterial->mNormalStrength = outdoorScene ? 0.82f : 1.0f;
+			: (outdoorScene ? 0.38f : (skeletalScene ? 0.82f : (auroraScene ? 0.16f : 1.0f)));
+		pbrMaterial->mNormalStrength = outdoorScene ? 0.82f : (auroraScene ? 0.72f : 1.0f);
 		pbrMaterial->mSurfaceVariation = outdoorScene ? 0.10f : 0.0f;
-		if (outdoorScene && outdoorIrradianceMap != nullptr &&
+		if ((outdoorScene || auroraScene) && outdoorIrradianceMap != nullptr &&
 			outdoorPrefilterMap != nullptr) {
 			pbrMaterial->mIrradianceMap = outdoorIrradianceMap;
 			pbrMaterial->mPrefilterMap = outdoorPrefilterMap;
@@ -490,7 +505,7 @@ void selectShowcase(int index) {
 		}
 	}
 	if (environmentMaterial != nullptr) {
-		if (outdoorScene && starfieldBackgroundTexture != nullptr) {
+		if ((outdoorScene || auroraScene) && starfieldBackgroundTexture != nullptr) {
 			environmentMaterial->mDiffuse = starfieldBackgroundTexture;
 		}
 		else if (skeletalScene && skeletalBackgroundTexture != nullptr) {
@@ -499,18 +514,23 @@ void selectShowcase(int index) {
 		else {
 			environmentMaterial->mDiffuse = studioEnvironmentTexture;
 		}
-		environmentMaterial->mIntensity = 1.0f;
+		environmentMaterial->mIntensity = auroraScene ? 0.14f : 1.0f;
 		environmentMaterial->mBlackLevel = 0.0f;
-		environmentMaterial->mStarIntensity = outdoorScene ? 0.78f : 0.0f;
-		environmentMaterial->mFixedBackground = outdoorScene;
-		environmentMaterial->mStarTwinkleEnabled = outdoorScene;
+		environmentMaterial->mStarIntensity = outdoorScene ? 0.78f : (auroraScene ? 0.54f : 0.0f);
+		environmentMaterial->mFixedBackground = outdoorScene || auroraScene;
+		environmentMaterial->mStarTwinkleEnabled = outdoorScene || auroraScene;
 	}
+	clearColor = auroraScene ? glm::vec3(0.001f, 0.002f, 0.006f) :
+		glm::vec3(0.1f, 0.13f, 0.25f);
 	if (renderPipeline != nullptr) {
 		PipelineSettings& settings = renderPipeline->settings();
-		settings.exposure = 1.0f;
-		settings.bloomIntensity = outdoorScene ? 0.05f : (skeletalScene ? 0.08f : 0.12f);
+		settings.exposure = auroraScene ? 1.12f : 1.0f;
+		settings.bloomIntensity = outdoorScene
+			? 0.05f
+			: (skeletalScene ? 0.08f : (auroraScene ? 0.32f : 0.12f));
+		settings.bloomThreshold = auroraScene ? 0.72f : 1.0f;
 		settings.ssaoEnabled = true;
-		settings.ssaoSamples = ssaoScene ? 64 : 32;
+		settings.ssaoSamples = ssaoScene ? 64 : (auroraScene ? 24 : 32);
 		settings.ssaoRadius = ssaoScene
 			? 1.0f
 			: (outdoorScene ? 0.82f : (skeletalScene ? 0.70f : 0.55f));
@@ -534,6 +554,12 @@ void selectShowcase(int index) {
 			settings.debugView = ssaoRestoreDebugView;
 			settings.bloomEnabled = ssaoRestoreBloomEnabled;
 			ssaoRestoreStateValid = false;
+		}
+		if (auroraScene) {
+			settings.mode = PipelineMode::Deferred;
+			settings.debugView = PipelineDebugView::Final;
+			settings.toneMapper = ToneMapper::Aces;
+			settings.bloomEnabled = true;
 		}
 	}
 	resetCamera();
@@ -794,6 +820,10 @@ void onResize(int width, int height) {
 }
 
 void onKey(int key, int action, int modifiers) {
+	if (action == GLFW_PRESS && key == GLFW_KEY_F9 && auroraShowcaseIndex >= 0) {
+		selectShowcase(auroraShowcaseIndex);
+		return;
+	}
 	if (action == GLFW_PRESS && key == GLFW_KEY_F10) {
 		setDemoLoopEnabled(!demoLoopEnabled);
 		return;
@@ -1147,6 +1177,109 @@ void prepare() {
 		);
 	}
 
+	Texture* auroraTerrainAlbedo = Texture::createSolidTexture(
+		"aurora-terrain-albedo",
+		38,
+		46,
+		55,
+		255,
+		GL_SRGB_ALPHA
+	);
+	PbrMaterial* auroraGroundMaterial = createSsaoMaterial(
+		auroraTerrainAlbedo,
+		matrixNormal,
+		matrixWhite,
+		glm::vec4(0.34f, 0.42f, 0.50f, 1.0f)
+	);
+	auroraGroundMaterial->mRoughnessScale = 0.74f;
+	PbrMaterial* auroraMountainMaterial = createSsaoMaterial(
+		auroraTerrainAlbedo,
+		matrixNormal,
+		matrixWhite,
+		glm::vec4(0.17f, 0.23f, 0.29f, 1.0f)
+	);
+	auroraMountainMaterial->mRoughnessScale = 0.96f;
+	PbrMaterial* auroraRockMaterial = createSsaoMaterial(
+		auroraTerrainAlbedo,
+		matrixNormal,
+		matrixWhite,
+		glm::vec4(0.29f, 0.37f, 0.43f, 1.0f)
+	);
+	auroraRockMaterial->mRoughnessScale = 0.88f;
+
+	Object* auroraScene = new Object();
+	Geometry* auroraGroundGeometry = Geometry::createBox(1.0f);
+	addSsaoPrimitive(
+		auroraScene,
+		auroraGroundGeometry,
+		auroraGroundMaterial,
+		glm::vec3(0.0f, -1.45f, -31.0f),
+		glm::vec3(150.0f, 0.70f, 150.0f)
+	);
+
+	Geometry* auroraMountainGeometry = Geometry::createRock(1.0f, 8, 12, 0.40f);
+	const struct AuroraMountain {
+		glm::vec3 position;
+		glm::vec3 scale;
+		float rotation;
+	} auroraMountains[] = {
+		{ { -65.0f, 4.0f, -69.0f }, { 19.0f, 17.0f, 13.0f }, 18.0f },
+		{ { -49.0f, 2.8f, -62.0f }, { 17.0f, 13.0f, 10.0f }, -12.0f },
+		{ { -32.0f, 4.9f, -70.0f }, { 20.0f, 18.0f, 14.0f }, 9.0f },
+		{ { -14.0f, 3.5f, -61.0f }, { 16.0f, 15.0f, 10.0f }, -20.0f },
+		{ { 4.0f, 5.4f, -72.0f }, { 22.0f, 20.0f, 15.0f }, 14.0f },
+		{ { 23.0f, 3.7f, -63.0f }, { 18.0f, 16.0f, 11.0f }, -8.0f },
+		{ { 41.0f, 5.0f, -71.0f }, { 21.0f, 19.0f, 14.0f }, 21.0f },
+		{ { 59.0f, 3.1f, -64.0f }, { 17.0f, 14.0f, 11.0f }, -16.0f },
+		{ { 73.0f, 4.6f, -72.0f }, { 20.0f, 18.0f, 14.0f }, 7.0f }
+	};
+	for (const AuroraMountain& mountain : auroraMountains) {
+		glm::vec3 mountainPosition = mountain.position;
+		glm::vec3 mountainScale = mountain.scale;
+		mountainPosition.y -= 3.0f;
+		mountainScale.y *= 0.68f;
+		addSsaoPrimitive(
+			auroraScene,
+			auroraMountainGeometry,
+			auroraMountainMaterial,
+			mountainPosition,
+			mountainScale,
+			glm::vec3(0.0f, mountain.rotation, 0.0f)
+		);
+	}
+
+	Geometry* auroraRockGeometry = Geometry::createRock(1.0f, 10, 14, 0.32f);
+	addSsaoPrimitive(
+		auroraScene,
+		auroraRockGeometry,
+		auroraRockMaterial,
+		glm::vec3(-9.5f, -0.15f, -10.0f),
+		glm::vec3(3.4f, 2.2f, 2.8f),
+		glm::vec3(0.0f, 24.0f, 0.0f)
+	);
+	addSsaoPrimitive(
+		auroraScene,
+		auroraRockGeometry,
+		auroraRockMaterial,
+		glm::vec3(10.5f, -0.35f, -16.0f),
+		glm::vec3(2.8f, 1.8f, 2.3f),
+		glm::vec3(0.0f, -31.0f, 0.0f)
+	);
+
+	auroraMaterial = new AuroraMaterial();
+	Mesh* auroraVolume = new Mesh(Geometry::createBox(1.0f), auroraMaterial);
+	auroraScene->addChild(auroraVolume);
+	auroraShowcaseIndex = static_cast<int>(showcases.size());
+	addShowcase(
+		"Volumetric Aurora",
+		"Procedural emissive volume inspired by Lawlor & Genetti (WSCG 2011)",
+		auroraScene,
+		4,
+		false,
+		glm::vec3(0.0f, 1.20f, 15.0f),
+		glm::vec3(0.0f, 18.0f, -44.0f)
+	);
+
 	selectShowcase(std::min(6, static_cast<int>(showcases.size()) - 1));
 	scene->addChild(environmentMesh);
 
@@ -1433,13 +1566,15 @@ void renderImGui() {
 		ImGui::TextDisabled("%s", showcase.attribution.c_str());
 		ImGui::PopTextWrapPos();
 		ImGui::Text("Meshes %d   Materials %d", showcase.meshCount, showcase.materialCount);
-		ImGui::Checkbox("Auto Rotate", &autoRotateShowcase);
-		ImGui::SliderFloat("Rotation Speed", &showcaseRotationSpeed, 0.0f, 60.0f, "%.0f deg/s");
-		if (ImGui::SliderFloat("Rotation", &showcaseRotation, -180.0f, 180.0f, "%.0f deg")) {
-			showcase.object->setAngleY(showcaseRotation);
-		}
-		if (ImGui::SliderFloat("Model Scale", &showcaseScale, 0.5f, 1.5f, "%.2f")) {
-			showcase.object->setScale(glm::vec3(showcaseScale));
+		if (selectedShowcase != auroraShowcaseIndex) {
+			ImGui::Checkbox("Auto Rotate", &autoRotateShowcase);
+			ImGui::SliderFloat("Rotation Speed", &showcaseRotationSpeed, 0.0f, 60.0f, "%.0f deg/s");
+			if (ImGui::SliderFloat("Rotation", &showcaseRotation, -180.0f, 180.0f, "%.0f deg")) {
+				showcase.object->setAngleY(showcaseRotation);
+			}
+			if (ImGui::SliderFloat("Model Scale", &showcaseScale, 0.5f, 1.5f, "%.2f")) {
+				showcase.object->setScale(glm::vec3(showcaseScale));
+			}
 		}
 		if (ImGui::Button("Reset View")) {
 			showcaseRotation = 0.0f;
@@ -1549,6 +1684,55 @@ void renderImGui() {
 				skeletalShowcase->setPlaying(true);
 			}
 		}
+		if (selectedShowcase == auroraShowcaseIndex && auroraMaterial != nullptr) {
+			ImGui::SeparatorText("Aurora Volume");
+			ImGui::Checkbox("Animate", &auroraMaterial->mAnimate);
+			ImGui::SliderFloat(
+				"Emission Intensity",
+				&auroraMaterial->mIntensity,
+				0.0f,
+				3.0f,
+				"%.2f"
+			);
+			ImGui::SliderInt(
+				"Raymarch Steps",
+				&auroraMaterial->mRaymarchSteps,
+				16,
+				96
+			);
+			ImGui::SliderFloat(
+				"Motion Speed",
+				&auroraMaterial->mMotionSpeed,
+				0.0f,
+				0.8f,
+				"%.2f"
+			);
+
+			ImGui::SeparatorText("Curtain Shape");
+			ImGui::SliderFloat("Lower Height", &auroraMaterial->mLowerHeight, 2.0f, 20.0f, "%.1f");
+			ImGui::SliderFloat("Upper Height", &auroraMaterial->mUpperHeight, 20.0f, 70.0f, "%.1f");
+			auroraMaterial->mUpperHeight = std::max(
+				auroraMaterial->mUpperHeight,
+				auroraMaterial->mLowerHeight + 1.0f
+			);
+			ImGui::SliderFloat("Distance", &auroraMaterial->mCurtainDistance, 20.0f, 90.0f, "%.1f");
+			ImGui::SliderFloat("Layer Spacing", &auroraMaterial->mCurtainSpread, 2.0f, 18.0f, "%.1f");
+			ImGui::SliderFloat("Horizontal Span", &auroraMaterial->mCurtainSpan, 20.0f, 130.0f, "%.1f");
+			ImGui::SliderFloat("Sheet Thickness", &auroraMaterial->mCurtainThickness, 0.15f, 2.0f, "%.2f");
+			ImGui::SliderFloat("Fold Scale", &auroraMaterial->mFoldScale, 0.02f, 0.20f, "%.3f");
+			ImGui::SliderFloat("Fold Strength", &auroraMaterial->mFoldStrength, 1.0f, 20.0f, "%.1f");
+			ImGui::SliderFloat("Turbulence", &auroraMaterial->mTurbulence, 0.0f, 1.5f, "%.2f");
+
+			ImGui::SeparatorText("Emission Layers");
+			ImGui::SliderFloat("Red Oxygen", &auroraMaterial->mRedEmission, 0.0f, 1.5f, "%.2f");
+			ImGui::SliderFloat("Blue Nitrogen", &auroraMaterial->mBlueEmission, 0.0f, 1.5f, "%.2f");
+			ImGui::ColorEdit3("Green Emission", &auroraMaterial->mGreenColor.x);
+			ImGui::ColorEdit3("Red Emission", &auroraMaterial->mRedColor.x);
+			ImGui::ColorEdit3("Blue Emission", &auroraMaterial->mBlueColor.x);
+			if (ImGui::Button("Reset Aurora")) {
+				auroraMaterial->resetAppearance();
+			}
+		}
 		if (showcase.supportsSoftShadow) {
 			ImGui::Separator();
 			ImGui::Checkbox("Soft Shadow", &softShadowEnabled);
@@ -1581,7 +1765,8 @@ void renderImGui() {
 		ImGui::SliderFloat("Environment", &pbrMaterial->mEnvIntensity, 0.0f, 5.0f, "%.2f");
 		ImGui::SliderFloat("Reflection LOD", &pbrMaterial->mMaxReflectionLod, 0.0f, 4.0f, "%.2f");
 		if (environmentMaterial != nullptr &&
-			selectedShowcase == optimizationShowcaseIndex) {
+			(selectedShowcase == optimizationShowcaseIndex ||
+				selectedShowcase == auroraShowcaseIndex)) {
 			ImGui::Separator();
 			ImGui::SliderFloat(
 				"Background Intensity",
@@ -1820,6 +2005,9 @@ int main(int argc, char* argv[]) {
 		previousFrameTime = currentFrameTime;
 		if (environmentMaterial != nullptr) {
 			environmentMaterial->mTimeSeconds = static_cast<float>(currentFrameTime);
+		}
+		if (auroraMaterial != nullptr && auroraMaterial->mAnimate) {
+			auroraMaterial->mTimeSeconds += deltaTime;
 		}
 
 		updateDemoLoop(currentFrameTime);
