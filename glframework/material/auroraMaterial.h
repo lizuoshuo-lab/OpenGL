@@ -11,7 +11,7 @@ public:
 public:
 	bool mAnimate{ true };
 	float mTimeSeconds{ 0.0f };
-	float mIntensity{ 0.90f };
+	float mIntensity{ 0.96f };
 	float mMotionSpeed{ 0.30f };
 	float mLowerHeight{ 6.0f };
 	float mUpperHeight{ 40.0f };

@@ -32,7 +32,7 @@ profile_i(h) = sharpLower(h - h_i) + softUpper(h - h_i) + foldedRidge
 Phi(x, h, z, t) = sum_i sheetDistance_i * profile_i * patch_i * spanFade_i
 ```
 
-这组约束让主体保持为有空隙的宽带，而不是整片雾墙；不同层可以交叉、断开或改变宽窄，也不会退化成笔直重复的竖纹。RPI 的 Sheet Modeling 工作将弧、带、褶皱和帷幕作为极光几何外观的主要类别，并使用曲线与随机扰动表达弯折结构。[Aurora Rendering with Sheet Modeling Technique](https://www.cs.rpi.edu/~cutler/classes/advancedgraphics/S09/final_projects/ng.pdf)
+这组约束让主体保持为有空隙的独立带状结构，而不是整片雾墙；不同层可以交叉、断开或改变宽窄，也不会退化成笔直重复的竖纹。RPI 的 Sheet Modeling 工作将弧、带、褶皱和帷幕作为极光几何外观的主要类别，并使用曲线与随机扰动表达弯折结构。[Aurora Rendering with Sheet Modeling Technique](https://www.cs.rpi.edu/~cutler/classes/advancedgraphics/S09/final_projects/ng.pdf)
 
 ### 2. 高度沉积分层
 
@@ -62,7 +62,12 @@ C = integral T(s) * L(ray(s)) ds
 T(s + ds) = T(s) * exp(-sigma * Phi(ray(s)) * ds)
 ```
 
-极光在物理上接近光学薄介质，因此外部合成使用加法混合；积分内部只加入很弱的透射衰减，用于避免多层帘幕叠加后完全失去结构。
+极光在物理上接近光学薄介质，因此外部合成使用加法混合；积分内部只加入很弱的透射衰减，用于避免多层帘幕叠加后完全失去结构。薄片在掠射角下会让大量低密度样本沿同一视线累积，产生整片天空染色。当前实现先对通量执行软阈值，再降低远层权重，只保留主体带和窄软边：
+
+```text
+Phi_isolated = Phi * smoothstep(0.018, 0.095, Phi)
+layerWeight_i = 1 - 0.22 * i
+```
 
 ### 4. 低分辨率体积缓冲
 
@@ -81,7 +86,7 @@ flowchart LR
     HDR --> BLOOM["Bloom + ACES"]
 ```
 
-这种处理将主要像素着色工作量降至全分辨率的约 `1/16`，同时由全分辨率深度维持山体轮廓。当前机器在 1600 x 900 控制面板截帧时显示约 `2.01 ms` 的显示帧时间；实际性能会随 GPU、分辨率和 Raymarch Steps 改变。
+这种处理将主要像素着色工作量降至全分辨率的约 `1/16`，同时由全分辨率深度维持山体轮廓。当前机器在 1600 x 900 控制面板截帧时显示约 `2.3 ms` 的显示帧时间；实际性能会随 GPU、分辨率和 Raymarch Steps 改变。
 
 ## ImGui 参数
 

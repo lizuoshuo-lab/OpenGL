@@ -17,7 +17,7 @@ AuroraMaterial::~AuroraMaterial() = default;
 void AuroraMaterial::resetAppearance() {
 	mAnimate = true;
 	mTimeSeconds = 0.0f;
-	mIntensity = 0.90f;
+	mIntensity = 0.96f;
 	mMotionSpeed = 0.30f;
 	mLowerHeight = 6.0f;
 	mUpperHeight = 40.0f;

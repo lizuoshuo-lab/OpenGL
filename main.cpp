@@ -527,8 +527,8 @@ void selectShowcase(int index) {
 		settings.exposure = auroraScene ? 1.12f : 1.0f;
 		settings.bloomIntensity = outdoorScene
 			? 0.05f
-			: (skeletalScene ? 0.08f : (auroraScene ? 0.12f : 0.12f));
-		settings.bloomThreshold = auroraScene ? 0.85f : 1.0f;
+			: (skeletalScene ? 0.08f : (auroraScene ? 0.055f : 0.12f));
+		settings.bloomThreshold = 1.0f;
 		settings.ssaoEnabled = true;
 		settings.ssaoSamples = ssaoScene ? 64 : (auroraScene ? 24 : 32);
 		settings.ssaoRadius = ssaoScene

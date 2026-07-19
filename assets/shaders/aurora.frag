@@ -148,7 +148,6 @@ vec2 curtainField(vec3 position, float motion)
 		float thickness = curtainThickness * mix(0.78, 1.38, flowB) *
 			mix(0.92, 1.12, layer * 0.5);
 		float sheetCore = exp(-pow(distanceToSheet / max(thickness, 0.05), 2.0));
-		float sheetHalo = exp(-pow(distanceToSheet / max(thickness * 4.2, 0.2), 2.0));
 
 		float spanOffset = (layer - 1.0) * 10.0;
 		float span = 1.0 - smoothstep(
@@ -179,32 +178,22 @@ vec2 curtainField(vec3 position, float motion)
 			0.055 * sin(position.x * 0.029 + phase - motion * 0.015) +
 			(pathDetail - 0.5) * 0.055;
 		ribbonCenter = clamp(ribbonCenter, 0.17, 0.88);
-		float ribbonWidth = mix(0.048, 0.084, flowB) *
+		float ribbonWidth = mix(0.036, 0.064, flowB) *
 			mix(1.08, 0.84, layer * 0.5);
 		float heightOffset = normalizedHeight - ribbonCenter;
 		float lowerDistance = min(heightOffset, 0.0) /
 			max(ribbonWidth * 0.58, 0.01);
 		float sharpLowerHalf = exp(-lowerDistance * lowerDistance);
 		float softUpperHalf = exp(-pow(
-			max(heightOffset, 0.0) / max(ribbonWidth * 1.38, 0.01),
+			max(heightOffset, 0.0) / max(ribbonWidth * 1.12, 0.01),
 			1.45
 		));
 		float ribbonRidge = sharpLowerHalf * softUpperHalf;
-		float shoulderDistance = heightOffset / max(ribbonWidth * 2.55, 0.01);
-		float ribbonShoulder = exp(-shoulderDistance * shoulderDistance);
-		float aboveRibbon = smoothstep(
-			-ribbonWidth * 0.42,
-			ribbonWidth * 0.48,
-			heightOffset
-		);
-		float veilDistance = max(heightOffset, 0.0);
-		float softVeil = exp(-veilDistance / max(ribbonWidth * 2.75, 0.02)) *
-			aboveRibbon;
 		float foldOffset = ribbonWidth * (
-			1.55 + 0.52 * sin(position.x * 0.072 + phase * 1.7 - motion * 0.025)
+			1.42 + 0.48 * sin(position.x * 0.072 + phase * 1.7 - motion * 0.025)
 		);
 		float foldedDistance = (heightOffset - foldOffset) /
-			max(ribbonWidth * 0.46, 0.01);
+			max(ribbonWidth * 0.38, 0.01);
 		float foldedRidge = exp(-foldedDistance * foldedDistance);
 
 		float rayCoordinate = position.x * (0.19 + layer * 0.018) +
@@ -213,12 +202,10 @@ vec2 curtainField(vec3 position, float motion)
 		float rayNoise = smoothNoise1(rayCoordinate);
 		float rays = mix(0.34, 1.18, pow(rayNoise, 2.4));
 		float rayModulation = mix(1.0, rays, rayDetail);
-		float verticalProfile = ribbonRidge * (0.76 + 0.16 * rayModulation) +
-			ribbonShoulder * 0.040 + softVeil * 0.026 * rayModulation +
-			foldedRidge * (0.11 + 0.08 * marbleBand);
-		float ribbon = sheetCore * verticalProfile +
-			sheetHalo * ribbonRidge * (0.006 + 0.010 * marbleBand);
-		total += ribbon * span * broadPatch * (1.0 - layer * 0.11);
+		float verticalProfile = ribbonRidge * (0.84 + 0.12 * rayModulation) +
+			foldedRidge * (0.07 + 0.055 * marbleBand);
+		float ribbon = sheetCore * verticalProfile;
+		total += ribbon * span * broadPatch * (1.0 - layer * 0.22);
 	}
 	return vec2(total, nearestDistance);
 }
@@ -272,13 +259,13 @@ void main()
 		}
 		vec3 position = cameraPosition + rayDirection * sampleDistance;
 		vec2 field = curtainField(position, motion);
-		float flux = field.x;
+		float flux = field.x * smoothstep(0.018, 0.095, field.x);
 		float adaptiveStep = clamp(
 			field.y * 0.32 / max(abs(rayDirection.z), 0.18),
 			minimumStep,
 			maximumStep
 		);
-		if (flux > 0.001) {
+		if (flux > 0.003) {
 			float normalizedHeight = (position.y - lowerHeight) /
 				max(upperHeight - lowerHeight, 0.001);
 			float sampleDensity = flux * adaptiveStep * 0.12;
