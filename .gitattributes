@@ -13,3 +13,4 @@
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 docs/assets/opengl-ibl-preview-1080p.mp4 -filter -diff -merge -text
 docs/assets/skeletal-animation-preview-1080p.mp4 -filter -diff -merge -text
+docs/assets/aurora-preview-1080p.mp4 -filter -diff -merge -text

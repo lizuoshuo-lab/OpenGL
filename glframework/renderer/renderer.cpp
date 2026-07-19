@@ -507,6 +507,8 @@ void Renderer::renderObject(
 			shader->setFloat("foldScale", auroraMat->mFoldScale);
 			shader->setFloat("foldStrength", auroraMat->mFoldStrength);
 			shader->setFloat("turbulence", auroraMat->mTurbulence);
+			shader->setFloat("bandVariation", auroraMat->mBandVariation);
+			shader->setFloat("rayDetail", auroraMat->mRayDetail);
 			shader->setFloat("redEmission", auroraMat->mRedEmission);
 			shader->setFloat("blueEmission", auroraMat->mBlueEmission);
 			shader->setInt("raymarchSteps", auroraMat->mRaymarchSteps);

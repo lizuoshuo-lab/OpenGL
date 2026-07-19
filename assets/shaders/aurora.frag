@@ -17,6 +17,8 @@ uniform float curtainThickness;
 uniform float foldScale;
 uniform float foldStrength;
 uniform float turbulence;
+uniform float bandVariation;
+uniform float rayDetail;
 uniform float redEmission;
 uniform float blueEmission;
 uniform int raymarchSteps;
@@ -25,7 +27,7 @@ uniform vec3 redColor;
 uniform vec3 blueColor;
 
 const int MAX_RAYMARCH_STEPS = 96;
-const int CURTAIN_COUNT = 4;
+const int CURTAIN_COUNT = 3;
 
 float hash11(float value)
 {
@@ -33,6 +35,13 @@ float hash11(float value)
 	value *= value + 33.33;
 	value *= value + value;
 	return fract(value);
+}
+
+float hash21(vec2 value)
+{
+	vec3 p3 = fract(vec3(value.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
 }
 
 float smoothNoise1(float value)
@@ -43,45 +52,173 @@ float smoothNoise1(float value)
 	return mix(hash11(cell), hash11(cell + 1.0), blend);
 }
 
+float smoothNoise2(vec2 value)
+{
+	vec2 cell = floor(value);
+	vec2 fraction = fract(value);
+	vec2 blend = fraction * fraction * (3.0 - 2.0 * fraction);
+	float bottom = mix(hash21(cell), hash21(cell + vec2(1.0, 0.0)), blend.x);
+	float top = mix(
+		hash21(cell + vec2(0.0, 1.0)),
+		hash21(cell + vec2(1.0, 1.0)),
+		blend.x
+	);
+	return mix(bottom, top, blend.y);
+}
+
+float fbm2(vec2 value)
+{
+	float result = 0.0;
+	float amplitude = 0.58;
+	mat2 rotation = mat2(0.80, -0.60, 0.60, 0.80);
+	for (int octave = 0; octave < 3; ++octave) {
+		result += smoothNoise2(value) * amplitude;
+		value = rotation * value * 2.03 + vec2(7.1, 3.7);
+		amplitude *= 0.48;
+	}
+	return result;
+}
+
 float gaussian(float value, float center, float sigma)
 {
 	float normalized = (value - center) / max(sigma, 0.0001);
 	return exp(-0.5 * normalized * normalized);
 }
 
-float curtainCenter(float x, float layer, float motion)
+float curtainCenter(
+	vec3 position,
+	float normalizedHeight,
+	float layer,
+	float motion,
+	float macroWarp
+)
 {
-	float phase = layer * 2.31;
-	float broadFold = sin(x * foldScale + phase + motion * 0.21);
-	float middleFold = sin(x * foldScale * 2.17 - phase * 1.37 - motion * 0.13);
-	float fineFold = sin(x * foldScale * 5.43 + phase * 0.73 + motion * 0.31);
-	float fold = broadFold + 0.38 * middleFold + turbulence * 0.18 * fineFold;
-	return -curtainDistance - layer * curtainSpread + fold * foldStrength;
+	float phase = layer * 2.73;
+	float altitude = normalizedHeight - 0.5;
+	float orientation = (hash11(layer * 17.1 + 2.0) - 0.5) * 0.42;
+	float warpedX = position.x + macroWarp * foldStrength * 1.85 +
+		altitude * foldStrength * (0.72 + 0.38 * sin(position.x * 0.027 + phase));
+	float broadFold = sin(warpedX * foldScale + phase + motion * 0.08);
+	float sweepingFold = sin(
+		warpedX * foldScale * 0.47 + altitude * 4.2 + phase * 1.41 - motion * 0.055
+	);
+	float localCurl = sin(
+		warpedX * foldScale * 2.63 - altitude * 2.1 + phase * 0.68 + motion * 0.12
+	);
+	float fold = broadFold * 0.62 + sweepingFold * 0.31 +
+		localCurl * turbulence * 0.14;
+	float heightSweep = altitude * foldStrength * 0.42 *
+		sin(position.x * 0.031 + phase * 1.8 - motion * 0.04);
+	return -curtainDistance - layer * curtainSpread + orientation * position.x +
+		fold * foldStrength + heightSweep;
 }
 
 vec2 curtainField(vec3 position, float motion)
 {
+	float normalizedHeight = clamp(
+		(position.y - lowerHeight) / max(upperHeight - lowerHeight, 0.001),
+		0.0,
+		1.0
+	);
+	vec2 flowCoordinate = vec2(
+		position.x * 0.026 + motion * 0.018,
+		position.y * 0.034 - motion * 0.012
+	);
+	float flowA = fbm2(flowCoordinate);
+	float flowB = fbm2(
+		flowCoordinate * 0.61 + vec2(8.7, -4.1) - vec2(motion * 0.011, motion * 0.007)
+	);
+	float macroWarp = (flowA - 0.5) * 2.0 +
+		0.42 * sin(flowB * 6.2831853 + normalizedHeight * 3.1);
+	float marbleBand = 1.0 - smoothstep(0.08, 0.48, abs(flowA - flowB));
 	float total = 0.0;
 	float nearestDistance = 1000.0;
 	for (int layerIndex = 0; layerIndex < CURTAIN_COUNT; ++layerIndex) {
 		float layer = float(layerIndex);
-		float center = curtainCenter(position.x, layer, motion);
+		float phase = layer * 2.73;
+		float center = curtainCenter(
+			position,
+			normalizedHeight,
+			layer,
+			motion,
+			macroWarp
+		);
 		float distanceToSheet = abs(position.z - center);
 		nearestDistance = min(nearestDistance, distanceToSheet);
-		float thickness = curtainThickness * mix(0.82, 1.25, layer / 3.0);
-		float sheet = exp(-pow(distanceToSheet / max(thickness, 0.05), 2.0));
+		float thickness = curtainThickness * mix(0.78, 1.38, flowB) *
+			mix(0.92, 1.12, layer * 0.5);
+		float sheetCore = exp(-pow(distanceToSheet / max(thickness, 0.05), 2.0));
+		float sheetHalo = exp(-pow(distanceToSheet / max(thickness * 4.2, 0.2), 2.0));
 
-		float spanOffset = (layer - 1.5) * 7.0;
+		float spanOffset = (layer - 1.0) * 10.0;
 		float span = 1.0 - smoothstep(
-			curtainSpan * 0.72,
+			curtainSpan * 0.66,
 			curtainSpan,
 			abs(position.x + spanOffset)
 		);
-		float rayCoordinate = position.x * (1.18 + layer * 0.13) + layer * 17.0;
-		float rayNoise = smoothNoise1(rayCoordinate + motion * (0.42 + layer * 0.07));
-		float filament = mix(0.16, 1.0, pow(rayNoise, 2.8));
-		float pulse = 0.78 + 0.22 * sin(position.x * 0.19 - motion * 0.55 + layer * 1.7);
-		total += sheet * span * filament * pulse * (1.0 - layer * 0.12);
+
+		float patchNoise = 0.5 + 0.5 * sin(
+			flowA * 5.7 + flowB * 3.2 + position.x * 0.022 + phase - motion * 0.06
+		);
+		float bandSignal = marbleBand * 0.64 + patchNoise * 0.36;
+		float brokenBand = smoothstep(0.42, 0.72, bandSignal);
+		float broadPatch = mix(1.0, 0.06 + 0.94 * brokenBand, bandVariation);
+
+		float pathNoise = fbm2(vec2(
+			position.x * 0.017 + layer * 3.7 - motion * 0.009,
+			layer * 5.3 + position.z * 0.004 + motion * 0.003
+		));
+		float pathDetail = fbm2(vec2(
+			position.x * 0.041 - layer * 2.1 + motion * 0.006,
+			layer * 8.7 + 2.4
+		));
+		float directionalSweep = sin(layer * 4.13 + 0.70) * 0.13 *
+			(position.x / max(curtainSpan, 1.0));
+		float ribbonCenter = 0.31 + layer * 0.18 + directionalSweep +
+			(pathNoise - 0.52) * 0.30 +
+			0.055 * sin(position.x * 0.029 + phase - motion * 0.015) +
+			(pathDetail - 0.5) * 0.055;
+		ribbonCenter = clamp(ribbonCenter, 0.17, 0.88);
+		float ribbonWidth = mix(0.048, 0.084, flowB) *
+			mix(1.08, 0.84, layer * 0.5);
+		float heightOffset = normalizedHeight - ribbonCenter;
+		float lowerDistance = min(heightOffset, 0.0) /
+			max(ribbonWidth * 0.58, 0.01);
+		float sharpLowerHalf = exp(-lowerDistance * lowerDistance);
+		float softUpperHalf = exp(-pow(
+			max(heightOffset, 0.0) / max(ribbonWidth * 1.38, 0.01),
+			1.45
+		));
+		float ribbonRidge = sharpLowerHalf * softUpperHalf;
+		float shoulderDistance = heightOffset / max(ribbonWidth * 2.55, 0.01);
+		float ribbonShoulder = exp(-shoulderDistance * shoulderDistance);
+		float aboveRibbon = smoothstep(
+			-ribbonWidth * 0.42,
+			ribbonWidth * 0.48,
+			heightOffset
+		);
+		float veilDistance = max(heightOffset, 0.0);
+		float softVeil = exp(-veilDistance / max(ribbonWidth * 2.75, 0.02)) *
+			aboveRibbon;
+		float foldOffset = ribbonWidth * (
+			1.55 + 0.52 * sin(position.x * 0.072 + phase * 1.7 - motion * 0.025)
+		);
+		float foldedDistance = (heightOffset - foldOffset) /
+			max(ribbonWidth * 0.46, 0.01);
+		float foldedRidge = exp(-foldedDistance * foldedDistance);
+
+		float rayCoordinate = position.x * (0.19 + layer * 0.018) +
+			normalizedHeight * (1.2 + 0.7 * sin(position.x * 0.021 + phase)) +
+			layer * 11.0 + motion * 0.10;
+		float rayNoise = smoothNoise1(rayCoordinate);
+		float rays = mix(0.34, 1.18, pow(rayNoise, 2.4));
+		float rayModulation = mix(1.0, rays, rayDetail);
+		float verticalProfile = ribbonRidge * (0.76 + 0.16 * rayModulation) +
+			ribbonShoulder * 0.040 + softVeil * 0.026 * rayModulation +
+			foldedRidge * (0.11 + 0.08 * marbleBand);
+		float ribbon = sheetCore * verticalProfile +
+			sheetHalo * ribbonRidge * (0.006 + 0.010 * marbleBand);
+		total += ribbon * span * broadPatch * (1.0 - layer * 0.11);
 	}
 	return vec2(total, nearestDistance);
 }

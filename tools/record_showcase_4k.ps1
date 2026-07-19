@@ -3,7 +3,7 @@ param(
     [string]$BuildDirectory,
     [string]$FfmpegPath = "ffmpeg",
     [string]$OutputPath,
-    [ValidateSet("Renderer", "Skeletal")]
+    [ValidateSet("Renderer", "Skeletal", "Aurora")]
     [string]$Profile = "Renderer",
     [int]$OutputIndex = 0,
     [int]$WarmupSeconds = 3,
@@ -21,6 +21,8 @@ $BuildDirectory = (Resolve-Path $BuildDirectory).Path
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $defaultVideo = if ($Profile -eq "Skeletal") {
         "docs\assets\skeletal-animation-showcase-24s.mp4"
+    } elseif ($Profile -eq "Aurora") {
+        "docs\assets\aurora-showcase-12s.mp4"
     } else {
         "docs\assets\opengl-ibl-showcase-30s.mp4"
     }
@@ -82,6 +84,10 @@ $scenes = if ($Profile -eq "Skeletal") {
         [pscustomobject]@{ Name = "02_walk"; Showcase = 10; Animation = "Walk"; Frames = 240 },
         [pscustomobject]@{ Name = "03_run"; Showcase = 10; Animation = "Run"; Frames = 240 }
     )
+} elseif ($Profile -eq "Aurora") {
+    @(
+        [pscustomobject]@{ Name = "01_aurora"; Showcase = 11; Animation = $null; Frames = 360 }
+    )
 } else {
     @(
         [pscustomobject]@{ Name = "01_chess"; Showcase = 7; Animation = $null; Frames = 240 },
@@ -100,6 +106,9 @@ $activeProcess = $null
 try {
     foreach ($scene in $scenes) {
         $appArguments = @("--fullscreen", ("--showcase={0}" -f $scene.Showcase))
+        if ($Profile -eq "Aurora") {
+            $appArguments += "--no-ui"
+        }
         if (-not [string]::IsNullOrWhiteSpace($scene.Animation)) {
             $appArguments += "--animation=$($scene.Animation)"
         }

@@ -527,8 +527,8 @@ void selectShowcase(int index) {
 		settings.exposure = auroraScene ? 1.12f : 1.0f;
 		settings.bloomIntensity = outdoorScene
 			? 0.05f
-			: (skeletalScene ? 0.08f : (auroraScene ? 0.32f : 0.12f));
-		settings.bloomThreshold = auroraScene ? 0.72f : 1.0f;
+			: (skeletalScene ? 0.08f : (auroraScene ? 0.12f : 0.12f));
+		settings.bloomThreshold = auroraScene ? 0.85f : 1.0f;
 		settings.ssaoEnabled = true;
 		settings.ssaoSamples = ssaoScene ? 64 : (auroraScene ? 24 : 32);
 		settings.ssaoRadius = ssaoScene
@@ -1722,6 +1722,8 @@ void renderImGui() {
 			ImGui::SliderFloat("Fold Scale", &auroraMaterial->mFoldScale, 0.02f, 0.20f, "%.3f");
 			ImGui::SliderFloat("Fold Strength", &auroraMaterial->mFoldStrength, 1.0f, 20.0f, "%.1f");
 			ImGui::SliderFloat("Turbulence", &auroraMaterial->mTurbulence, 0.0f, 1.5f, "%.2f");
+			ImGui::SliderFloat("Band Variation", &auroraMaterial->mBandVariation, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Ray Detail", &auroraMaterial->mRayDetail, 0.0f, 1.0f, "%.2f");
 
 			ImGui::SeparatorText("Emission Layers");
 			ImGui::SliderFloat("Red Oxygen", &auroraMaterial->mRedEmission, 0.0f, 1.5f, "%.2f");
