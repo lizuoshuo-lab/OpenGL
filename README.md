@@ -4,13 +4,15 @@
 
 一个面向实时图形渲染岗位的 C++17 / OpenGL 4.6 展示项目。项目包含可拆分的 Shadow、GBuffer、Lighting、Transparent、PostProcess 与 UI Pass，支持 Deferred PBR、SSAO、Bloom、ACES、透明物体 Forward Pass、IBL、软阴影，以及视锥裁剪、实例化和三级 LOD。所有渲染开关、调试缓冲区和性能数据都集中在 ImGui 中。
 
-[GitHub 仓库](https://github.com/lizuoshuo-lab/OpenGL) · [观看 30 秒渲染演示](docs/assets/opengl-ibl-showcase-30s.mp4) · [观看 24 秒骨骼动画演示](docs/assets/skeletal-animation-showcase-24s.mp4)
+[GitHub 仓库](https://github.com/lizuoshuo-lab/OpenGL) · [播放 30 秒渲染演示（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4) · [播放 24 秒骨骼动画（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4)
+
+4K 原片：[渲染演示（下载）](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/opengl-ibl-showcase-30s.mp4) · [骨骼动画（下载）](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/skeletal-animation-showcase-24s.mp4)
 
 ## Gallery
 
 | GPU 骨骼动画：Walk / Survey / Run 与动态软阴影 |
 | --- |
-| [![Fox GPU skeletal animation and skinned soft-shadow showcase](docs/assets/showcase_skeletal_animation_4k.png)](docs/assets/skeletal-animation-showcase-24s.mp4) |
+| [![Fox GPU skeletal animation and skinned soft-shadow showcase](docs/assets/showcase_skeletal_animation_4k.png)](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4) |
 
 | Deferred SSAO-only：64 样本与边缘感知上采样 |
 | --- |

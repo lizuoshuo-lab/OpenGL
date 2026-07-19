@@ -12,7 +12,9 @@
 
 ![Fox GPU skeletal animation](assets/showcase_skeletal_animation_4k.png)
 
-[观看 24 秒 4K 实机演示：Survey / Walk / Run](assets/skeletal-animation-showcase-24s.mp4)
+[播放 24 秒 1080p 实机演示：Survey / Walk / Run](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4)
+
+[下载 4K 原片](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/skeletal-animation-showcase-24s.mp4)
 
 ## 数据链路
 

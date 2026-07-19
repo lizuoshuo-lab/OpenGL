@@ -1,6 +1,8 @@
 # 30 秒 4K 演示脚本
 
-成片：[opengl-ibl-showcase-30s.mp4](assets/opengl-ibl-showcase-30s.mp4)
+在线播放：[30 秒 1080p 预览](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4)
+
+4K 成片：[下载原片](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/opengl-ibl-showcase-30s.mp4)
 
 ## 分镜
 
