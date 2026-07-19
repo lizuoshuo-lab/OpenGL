@@ -61,16 +61,18 @@ ImGui 的 `Output Buffer` 可以全屏查看 World Position、World Normal、Alb
 
 ## Asteroid Belt 优化
 
-展示场景使用 Poly Haven 的 Moon Rock 01、02、06 三套 2K glTF 月岩，构成 5000 颗确定性分布的高密度小行星带。三组材质分别表现硅酸盐、碳质岩和金属陨石。中心行星使用 USGS/NASA Viking 全球拼接图作为 4K Albedo，并保持 Metallic 为 0、Roughness 为 1；场景不再添加透明大气球，因此没有额外外圈。天空盒由 GLSL 在纯暗宇宙底色上生成随机冷暖色微小星点，不包含大气渐变、银河照片、月亮或大光斑；PBR 的 Irradiance 与 GGX Prefilter 仍由 Qwantani Night EXR 生成。
+展示场景使用 Poly Haven 的 Moon Rock 01、02、06 三套 2K glTF 月岩，构成 5000 颗确定性分布的高密度小行星带。三组材质分别表现硅酸盐、碳质岩和金属陨石。中心行星使用 USGS/NASA Viking 全球拼接图作为 4K Albedo，并保持 Metallic 为 0、Roughness 为 1；场景不再添加透明大气球，因此没有额外外圈。天空盒使用纯暗宇宙底色；星点由 GLSL 在屏幕空间生成为抗锯齿小圆点，不受相机远距离环绕影响，并只允许少量星点异步改变亮度。背景不包含大气渐变、银河照片、月亮或大光斑；PBR 的 Irradiance 与 GGX Prefilter 仍由 Qwantani Night EXR 生成。
 
-行星、单颗小行星和带状轨道分别使用三层变换：中心行星绕自身轴旋转，每颗小行星保留独立随机旋转轴，Reference 与 Instanced 两棵场景树共享同一公转父矩阵。相机可在固定高度和半径上绕中心行星旋转，并逐帧重建 LookAt 基向量。基准采样期间冻结场景与相机动画，确保两个模式比较同一姿态。Medium/Low 两级程序化代理保留各自材质分组，Reference 与 Optimized 使用相同场景和相机。
+行星、单颗小行星和带状轨道分别使用三层变换：中心行星绕自身轴旋转，每颗小行星保留独立随机旋转轴，Reference 与 Instanced 两棵场景树共享同一公转父矩阵。相机可在固定高度和半径上绕中心行星旋转，并逐帧重建 LookAt 基向量。基准采样期间冻结场景与相机动画，确保两个模式比较同一姿态。
+
+Medium/Low 网格由 meshoptimizer 从每个原始 glTF primitive 的索引缓冲生成，继续使用同一套顶点位置、UV、法线、切线和 `PbrMaterial`，不再替换为通用代理模型。LOD 判定使用 `相机距离 / 实例最大缩放` 的投影距离近似；High/Medium 与 Medium/Low 在各自过渡区同时提交，并通过逐实例淡化值和稳定的屏幕空间互补抖动控制覆盖率。两个层级的覆盖率之和保持为 1，因此材质、亮度和轮廓不会在阈值处瞬间切换。
 
 | 模式 | Frustum Culling | GPU Instancing | LOD |
 | --- | --- | --- | --- |
 | Reference | Off | Off | High only |
-| Optimized | On | On | 75 / 125 world-unit thresholds |
+| Optimized | On | On | High→Medium 170-260；Medium→Low 420-620（投影距离近似） |
 
-Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 AABB 视锥裁剪，再按 LOD 分组提交实例。AABB 可在 ImGui 中随时显示，检查剔除边界。
+Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 AABB 视锥裁剪，再按 LOD 与材质分组提交实例。每次实例绘制都会重新绑定当前批次的矩阵与淡化属性，避免共享几何 VAO 时不同材质批次读取到错误的实例缓冲。AABB 可在 ImGui 中随时显示，检查剔除边界。
 
 ## A/B 实测
 
@@ -78,10 +80,10 @@ Reference 使用逐对象 Draw Call，便于建立基线；Optimized 先执行 A
 
 | 指标 | Reference | Optimized | 降幅 |
 | --- | ---: | ---: | ---: |
-| CPU Frame | 381.087 ms | 25.385 ms | 93.34% |
-| GPU Frame | 179.753 ms | 0.670 ms | 99.63% |
-| Draw Calls | 10,233 | 28 | 99.73% |
-| Triangles | 49,025,780 | 4,170,168 | 91.49% |
+| CPU Frame | 390.684 ms | 33.430 ms | 91.44% |
+| GPU Frame | 197.731 ms | 2.531 ms | 98.72% |
+| Draw Calls | 10,233 | 34 | 99.67% |
+| Triangles | 49,025,780 | 26,392,466 | 46.17% |
 
 ## 操作入口
 

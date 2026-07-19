@@ -13,10 +13,16 @@ endif()
 include_directories(
 	SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty/include
 		SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/application/miniz
+		SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty/meshoptimizer
 )
 
 link_directories(
 	SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty/lib
+)
+
+add_library(meshoptimizer STATIC
+	"thirdParty/meshoptimizer/allocator.cpp"
+	"thirdParty/meshoptimizer/simplifier.cpp"
 )
 
 add_subdirectory(wrapper)
@@ -31,7 +37,7 @@ if(MSVC)
 	target_sources(openglStudy PRIVATE "application.manifest")
 endif()
 
-target_link_libraries(openglStudy glfw3.lib  assimp-vc143-mtd.lib zlibstaticd.lib   wrapper app fw imguilib)
+target_link_libraries(openglStudy glfw3.lib assimp-vc143-mtd.lib zlibstaticd.lib wrapper app fw meshoptimizer imguilib)
 
 set(OPENGL_RUNTIME_DLLS
 	"${CMAKE_CURRENT_SOURCE_DIR}/thirdParty/bin/assimp-vc143-mt.dll"

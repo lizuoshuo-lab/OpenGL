@@ -502,6 +502,8 @@ void selectShowcase(int index) {
 		environmentMaterial->mIntensity = 1.0f;
 		environmentMaterial->mBlackLevel = 0.0f;
 		environmentMaterial->mStarIntensity = outdoorScene ? 0.78f : 0.0f;
+		environmentMaterial->mFixedBackground = outdoorScene;
+		environmentMaterial->mStarTwinkleEnabled = outdoorScene;
 	}
 	if (renderPipeline != nullptr) {
 		PipelineSettings& settings = renderPipeline->settings();
@@ -1602,6 +1604,31 @@ void renderImGui() {
 				5.0f,
 				"%.2f"
 			);
+			ImGui::Checkbox("Lock Starfield", &environmentMaterial->mFixedBackground);
+			ImGui::Checkbox("Star Twinkle", &environmentMaterial->mStarTwinkleEnabled);
+			if (environmentMaterial->mStarTwinkleEnabled) {
+				ImGui::SliderFloat(
+					"Twinkling Stars",
+					&environmentMaterial->mStarTwinkleFraction,
+					0.0f,
+					0.20f,
+					"%.2f"
+				);
+				ImGui::SliderFloat(
+					"Twinkle Strength",
+					&environmentMaterial->mStarTwinkleStrength,
+					0.0f,
+					0.50f,
+					"%.2f"
+				);
+				ImGui::SliderFloat(
+					"Twinkle Speed",
+					&environmentMaterial->mStarTwinkleSpeed,
+					0.0f,
+					4.0f,
+					"%.2f"
+				);
+			}
 		}
 	}
 
@@ -1791,6 +1818,9 @@ int main(int argc, char* argv[]) {
 			std::min(currentFrameTime - previousFrameTime, 0.1)
 		);
 		previousFrameTime = currentFrameTime;
+		if (environmentMaterial != nullptr) {
+			environmentMaterial->mTimeSeconds = static_cast<float>(currentFrameTime);
+		}
 
 		updateDemoLoop(currentFrameTime);
 		cameraControl->update();

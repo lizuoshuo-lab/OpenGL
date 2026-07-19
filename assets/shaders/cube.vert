@@ -6,18 +6,16 @@ out vec3 uvw;
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
+uniform bool fixedBackground;
 
 
 void main()
 {
-	vec4 transformPosition = vec4(aPos, 1.0);
-
-	transformPosition = modelMatrix * transformPosition;
-
-
-	gl_Position = projectionMatrix * viewMatrix * transformPosition;
-
-	gl_Position = gl_Position.xyww;
-	
-	uvw = aPos;
+	mat4 modelRotation = mat4(mat3(modelMatrix));
+	mat4 viewRotation = fixedBackground
+		? mat4(1.0)
+		: mat4(mat3(viewMatrix));
+	vec4 clipPosition = projectionMatrix * viewRotation * modelRotation * vec4(aPos, 1.0);
+	gl_Position = clipPosition.xyww;
+	uvw = mat3(modelMatrix) * aPos;
 }

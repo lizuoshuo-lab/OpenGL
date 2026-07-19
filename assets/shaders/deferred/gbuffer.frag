@@ -8,6 +8,7 @@ in vec2 uv;
 in vec3 worldPosition;
 in mat3 tbn;
 flat in vec3 instanceOrigin;
+flat in float lodFade;
 
 uniform sampler2D albedoTex;
 uniform sampler2D normalTex;
@@ -42,6 +43,22 @@ float hash13(vec3 value)
 	return fract((value.x + value.y) * value.z);
 }
 
+float lodDither(vec2 pixel)
+{
+	return fract(52.9829189 * fract(dot(floor(pixel), vec2(0.06711056, 0.00583715))));
+}
+
+void applyLodFade()
+{
+	float threshold = lodDither(gl_FragCoord.xy);
+	if (lodFade > 1.0) {
+		if (threshold < lodFade - 1.0) discard;
+	}
+	else if (threshold >= lodFade) {
+		discard;
+	}
+}
+
 vec3 mineralTint(float seed)
 {
 	vec3 coolStone = vec3(0.82, 0.90, 1.02);
@@ -52,6 +69,7 @@ vec3 mineralTint(float seed)
 
 void main()
 {
+	applyLodFade();
 	vec4 albedoSample = texture(albedoTex, uv);
 	float alpha = albedoSample.a * opacity;
 	if (alphaMask != 0 && alpha < alphaCutoff) {

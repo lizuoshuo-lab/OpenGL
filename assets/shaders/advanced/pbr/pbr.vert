@@ -6,12 +6,14 @@ layout (location = 3) in vec3 aTangent;
 layout (location = 4) in mat4 aInstanceMatrix;
 layout (location = 8) in ivec4 aBoneIds;
 layout (location = 9) in vec4 aBoneWeights;
+layout (location = 10) in float aLodFade;
 out vec2 uv;
 out vec3 normal;
 out vec3 worldPosition;
 out mat3 tbn;
 out vec4 softShadowPosition;
 flat out vec3 instanceOrigin;
+flat out float lodFade;
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
@@ -46,6 +48,7 @@ void main()
 	vec4 transformPosition = vertexModel * vec4(aPos, 1.0);
 	worldPosition = transformPosition.xyz;
 	instanceOrigin = renderModel[3].xyz;
+	lodFade = instanced != 0 ? aLodFade : 1.0;
 	softShadowPosition = softShadowMatrix * transformPosition;
 
 	gl_Position = projectionMatrix * viewMatrix * transformPosition;

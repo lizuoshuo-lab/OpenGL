@@ -1,4 +1,5 @@
 #include "geometry.h"
+#include "meshoptimizer.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -14,6 +15,10 @@ Geometry::Geometry(
 	const std::vector<float>& uvs,
 	const std::vector<unsigned int>& indices
 ) {
+	mPositions = positions;
+	mNormals = normals;
+	mUvs = uvs;
+	mIndices = indices;
 	mIndicesCount = static_cast<uint32_t>(indices.size());
 	updateBounds(positions);
 	mEstimatedGpuBytes =
@@ -66,6 +71,11 @@ Geometry::Geometry(
 	const std::vector<float>& colors,
 	const std::vector<unsigned int>& indices
 ) {
+	mPositions = positions;
+	mNormals = normals;
+	mUvs = uvs;
+	mColors = colors;
+	mIndices = indices;
 	mIndicesCount = static_cast<uint32_t>(indices.size());
 	updateBounds(positions);
 	mEstimatedGpuBytes =
@@ -126,6 +136,11 @@ Geometry::Geometry(
 	const std::vector<unsigned int>& indices,
 	const std::vector<float>& tangents
 ) {
+	mPositions = positions;
+	mNormals = normals;
+	mUvs = uvs;
+	mTangents = tangents;
+	mIndices = indices;
 	mIndicesCount = static_cast<uint32_t>(indices.size());
 	updateBounds(positions);
 	mEstimatedGpuBytes =
@@ -207,6 +222,96 @@ Geometry::~Geometry() {
 	if (mBoneWeightsVbo != 0) {
 		glDeleteBuffers(1, &mBoneWeightsVbo);
 	}
+}
+
+Geometry* Geometry::createSimplified(float targetRatio, float targetError) const {
+	const std::size_t vertexCount = mPositions.size() / 3;
+	if (vertexCount == 0 || mIndices.size() < 6) {
+		return nullptr;
+	}
+
+	const float ratio = std::clamp(targetRatio, 0.01f, 1.0f);
+	std::size_t targetIndexCount = static_cast<std::size_t>(
+		static_cast<double>(mIndices.size()) * ratio
+	);
+	targetIndexCount = std::max<std::size_t>(3, targetIndexCount - targetIndexCount % 3);
+
+	std::vector<unsigned int> simplifiedIndices(mIndices.size());
+	float resultError = 0.0f;
+	std::size_t resultCount = 0;
+	const bool hasNormals = mNormals.size() == vertexCount * 3;
+	const bool hasUvs = mUvs.size() == vertexCount * 2;
+	if (hasNormals && hasUvs) {
+		std::vector<float> attributes(vertexCount * 5);
+		for (std::size_t vertex = 0; vertex < vertexCount; ++vertex) {
+			attributes[vertex * 5 + 0] = mNormals[vertex * 3 + 0];
+			attributes[vertex * 5 + 1] = mNormals[vertex * 3 + 1];
+			attributes[vertex * 5 + 2] = mNormals[vertex * 3 + 2];
+			attributes[vertex * 5 + 3] = mUvs[vertex * 2 + 0];
+			attributes[vertex * 5 + 4] = mUvs[vertex * 2 + 1];
+		}
+		const float attributeWeights[5] = { 0.75f, 0.75f, 0.75f, 16.0f, 16.0f };
+		resultCount = meshopt_simplifyWithAttributes(
+			simplifiedIndices.data(),
+			mIndices.data(),
+			mIndices.size(),
+			mPositions.data(),
+			vertexCount,
+			sizeof(float) * 3,
+			attributes.data(),
+			sizeof(float) * 5,
+			attributeWeights,
+			5,
+			nullptr,
+			targetIndexCount,
+			std::max(targetError, 0.0001f),
+			meshopt_SimplifyPrune,
+			&resultError
+		);
+	}
+	else {
+		resultCount = meshopt_simplify(
+			simplifiedIndices.data(),
+			mIndices.data(),
+			mIndices.size(),
+			mPositions.data(),
+			vertexCount,
+			sizeof(float) * 3,
+			targetIndexCount,
+			std::max(targetError, 0.0001f),
+			meshopt_SimplifyPrune,
+			&resultError
+		);
+	}
+
+	if (resultCount < 3 || resultCount >= mIndices.size()) {
+		return nullptr;
+	}
+	simplifiedIndices.resize(resultCount - resultCount % 3);
+	Geometry* simplified = nullptr;
+	if (!mTangents.empty()) {
+		simplified = new Geometry(
+			mPositions,
+			mNormals,
+			mUvs,
+			simplifiedIndices,
+			mTangents
+		);
+	}
+	else if (!mColors.empty()) {
+		simplified = new Geometry(
+			mPositions,
+			mNormals,
+			mUvs,
+			mColors,
+			simplifiedIndices
+		);
+	}
+	else {
+		simplified = new Geometry(mPositions, mNormals, mUvs, simplifiedIndices);
+	}
+	simplified->mSimplificationError = resultError;
+	return simplified;
 }
 
 void Geometry::setSkinningData(

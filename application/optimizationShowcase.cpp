@@ -3,6 +3,7 @@
 #include "../glframework/renderer/frustum.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <random>
@@ -75,6 +76,10 @@ void OptimizationShowcase::collectSourceComponents(
 				static_cast<PbrMaterial*>(mesh->mMaterial),
 				mesh->getModelMatrix(),
 				nullptr,
+				nullptr,
+				nullptr,
+				nullptr,
+				nullptr,
 				variantIndex
 			});
 		}
@@ -112,23 +117,6 @@ void OptimizationShowcase::calculateSourceBounds() {
 		mSourceMinimum = glm::vec3(-0.5f);
 		mSourceMaximum = glm::vec3(0.5f);
 	}
-}
-
-glm::mat4 OptimizationShowcase::createProxyMatrix(
-	const glm::mat4& placement,
-	Geometry* proxyGeometry
-) const {
-	const glm::vec3 sourceCenter = (mSourceMinimum + mSourceMaximum) * 0.5f;
-	const glm::vec3 sourceSize = mSourceMaximum - mSourceMinimum;
-	const glm::vec3 proxyCenter =
-		(proxyGeometry->getMinBounds() + proxyGeometry->getMaxBounds()) * 0.5f;
-	const glm::vec3 proxySize = glm::max(
-		proxyGeometry->getMaxBounds() - proxyGeometry->getMinBounds(),
-		glm::vec3(0.001f)
-	);
-	glm::mat4 matrix = glm::translate(placement, sourceCenter);
-	matrix = glm::scale(matrix, sourceSize / proxySize);
-	return glm::translate(matrix, -proxyCenter);
 }
 
 OptimizationShowcase::OptimizationShowcase(
@@ -325,35 +313,29 @@ OptimizationShowcase::OptimizationShowcase(
 		);
 		component.instancedMesh->setActiveLodForStats(0);
 		mInstancedRoot->addChild(component.instancedMesh);
-	}
-	mMediumGeometry = Geometry::createRock(1.0f, 12, 18, 0.26f);
-	mLowGeometry = Geometry::createRock(1.0f, 5, 8, 0.32f);
-	mMediumProxies.reserve(mVariantCount);
-	mLowProxies.reserve(mVariantCount);
-	for (std::size_t variantIndex = 0; variantIndex < mVariantCount; ++variantIndex) {
-		PbrMaterial* variantMaterial = mPlanetMaterial;
-		for (const SourceComponent& component : mSourceComponents) {
-			if (component.variantIndex == variantIndex) {
-				variantMaterial = component.material;
-				break;
-			}
+
+		component.mediumGeometry = component.geometry->createSimplified(0.45f, 0.015f);
+		if (component.mediumGeometry == nullptr) {
+			component.mediumGeometry = component.geometry;
 		}
-		InstancedMesh* mediumProxy = new InstancedMesh(
-			mMediumGeometry,
-			variantMaterial,
+		component.lowGeometry = component.mediumGeometry->createSimplified(0.34f, 0.035f);
+		if (component.lowGeometry == nullptr) {
+			component.lowGeometry = component.mediumGeometry;
+		}
+		component.mediumMesh = new InstancedMesh(
+			component.mediumGeometry,
+			component.material,
 			static_cast<unsigned int>(mPlacements.size())
 		);
-		InstancedMesh* lowProxy = new InstancedMesh(
-			mLowGeometry,
-			variantMaterial,
+		component.lowMesh = new InstancedMesh(
+			component.lowGeometry,
+			component.material,
 			static_cast<unsigned int>(mPlacements.size())
 		);
-		mediumProxy->setActiveLodForStats(1);
-		lowProxy->setActiveLodForStats(2);
-		mMediumProxies.push_back(mediumProxy);
-		mLowProxies.push_back(lowProxy);
-		mInstancedRoot->addChild(mediumProxy);
-		mInstancedRoot->addChild(lowProxy);
+		component.mediumMesh->setActiveLodForStats(1);
+		component.lowMesh->setActiveLodForStats(2);
+		mInstancedRoot->addChild(component.mediumMesh);
+		mInstancedRoot->addChild(component.lowMesh);
 	}
 
 	mReferenceRoot->setVisible(false);
@@ -437,12 +419,38 @@ void OptimizationShowcase::update(
 		return;
 	}
 
-	std::vector<Placement> highPlacements;
-	std::vector<Placement> mediumPlacements;
-	std::vector<Placement> lowPlacements;
+	struct LodPlacement {
+		const Placement* placement{ nullptr };
+		float fade{ 1.0f };
+	};
+	std::vector<LodPlacement> highPlacements;
+	std::vector<LodPlacement> mediumPlacements;
+	std::vector<LodPlacement> lowPlacements;
+	std::array<unsigned int, 3> logicalLodCounts{};
 	highPlacements.reserve(mPlacements.size());
 	mediumPlacements.reserve(mPlacements.size());
 	lowPlacements.reserve(mPlacements.size());
+	auto smoothRange = [](float value, float start, float end) {
+		const float normalized = std::clamp((value - start) / (end - start), 0.0f, 1.0f);
+		return normalized * normalized * (3.0f - 2.0f * normalized);
+	};
+	auto appendTransition = [](
+		std::vector<LodPlacement>& nearPlacements,
+		std::vector<LodPlacement>& farPlacements,
+		const Placement& placement,
+		float blend
+	) {
+		if (blend <= 0.0f) {
+			nearPlacements.push_back({ &placement, 1.0f });
+			return;
+		}
+		if (blend >= 1.0f) {
+			farPlacements.push_back({ &placement, 1.0f });
+			return;
+		}
+		nearPlacements.push_back({ &placement, 1.0f + blend });
+		farPlacements.push_back({ &placement, blend });
+	};
 	Frustum frustum;
 	if (camera != nullptr) {
 		frustum.update(camera->getProjectionMatrix() * camera->getViewMatrix());
@@ -458,58 +466,92 @@ void OptimizationShowcase::update(
 		)) {
 			continue;
 		}
-		int lod = 0;
-		if (camera != nullptr && lodEnabled) {
-			const glm::vec3 worldCenter = glm::vec3(
-				worldMatrix * glm::vec4(sourceCenter, 1.0f)
-			);
-			const float distance = glm::distance(camera->mPosition, worldCenter);
-			lod = distance >= 125.0f ? 2 : (distance >= 75.0f ? 1 : 0);
+		if (camera == nullptr || !lodEnabled) {
+			highPlacements.push_back({ &placement, 1.0f });
+			++logicalLodCounts[0];
+			continue;
 		}
-		(lod == 0 ? highPlacements : (lod == 1 ? mediumPlacements : lowPlacements))
-			.push_back(placement);
+		const glm::vec3 worldCenter = glm::vec3(
+			worldMatrix * glm::vec4(sourceCenter, 1.0f)
+		);
+		const float distance = glm::distance(camera->mPosition, worldCenter);
+		const float largestScale = std::max({
+			placement.scale.x,
+			placement.scale.y,
+			placement.scale.z,
+			0.05f
+		});
+		const float projectedDistance = distance / largestScale;
+		if (projectedDistance < 260.0f) {
+			++logicalLodCounts[projectedDistance < 215.0f ? 0 : 1];
+			appendTransition(
+				highPlacements,
+				mediumPlacements,
+				placement,
+				smoothRange(projectedDistance, 170.0f, 260.0f)
+			);
+		}
+		else if (projectedDistance < 420.0f) {
+			++logicalLodCounts[1];
+			mediumPlacements.push_back({ &placement, 1.0f });
+		}
+		else {
+			++logicalLodCounts[projectedDistance < 520.0f ? 1 : 2];
+			appendTransition(
+				mediumPlacements,
+				lowPlacements,
+				placement,
+				smoothRange(projectedDistance, 420.0f, 620.0f)
+			);
+		}
 	}
 
 	for (std::size_t index = 0; index < mSourceComponents.size(); ++index) {
 		SourceComponent& component = mSourceComponents[index];
-		std::vector<glm::mat4> matrices;
-		matrices.reserve(highPlacements.size());
-		for (const Placement& placement : highPlacements) {
-			if (placement.variantIndex == component.variantIndex) {
-				matrices.push_back(placement.matrix * component.localMatrix);
+		auto buildInstances = [&](
+			const std::vector<LodPlacement>& placements,
+			std::vector<glm::mat4>& matrices,
+			std::vector<float>& fades
+		) {
+			matrices.reserve(placements.size());
+			fades.reserve(placements.size());
+			for (const LodPlacement& lodPlacement : placements) {
+				if (lodPlacement.placement->variantIndex != component.variantIndex) {
+					continue;
+				}
+				matrices.push_back(
+					lodPlacement.placement->matrix * component.localMatrix
+				);
+				fades.push_back(lodPlacement.fade);
 			}
-		}
-		component.instancedMesh->setMatrices(matrices);
+		};
+
+		std::vector<glm::mat4> highMatrices;
+		std::vector<glm::mat4> mediumMatrices;
+		std::vector<glm::mat4> lowMatrices;
+		std::vector<float> highFades;
+		std::vector<float> mediumFades;
+		std::vector<float> lowFades;
+		buildInstances(highPlacements, highMatrices, highFades);
+		buildInstances(mediumPlacements, mediumMatrices, mediumFades);
+		buildInstances(lowPlacements, lowMatrices, lowFades);
+
+		component.instancedMesh->setInstances(highMatrices, highFades);
+		component.mediumMesh->setInstances(mediumMatrices, mediumFades);
+		component.lowMesh->setInstances(lowMatrices, lowFades);
 		component.instancedMesh->setLogicalInstanceTotal(
 			index == 0 ? static_cast<unsigned int>(mPlacements.size()) : 0u
 		);
 		component.instancedMesh->setLogicalVisibleCount(
-			index == 0 ? static_cast<unsigned int>(highPlacements.size()) : 0u
+			index == 0 ? logicalLodCounts[0] : 0u
 		);
-	}
-
-	for (std::size_t variantIndex = 0; variantIndex < mVariantCount; ++variantIndex) {
-		std::vector<glm::mat4> mediumMatrices;
-		std::vector<glm::mat4> lowMatrices;
-		for (const Placement& placement : mediumPlacements) {
-			if (placement.variantIndex == variantIndex) {
-				mediumMatrices.push_back(createProxyMatrix(placement.matrix, mMediumGeometry));
-			}
-		}
-		for (const Placement& placement : lowPlacements) {
-			if (placement.variantIndex == variantIndex) {
-				lowMatrices.push_back(createProxyMatrix(placement.matrix, mLowGeometry));
-			}
-		}
-		InstancedMesh* mediumProxy = mMediumProxies[variantIndex];
-		InstancedMesh* lowProxy = mLowProxies[variantIndex];
-		mediumProxy->setMatrices(mediumMatrices);
-		lowProxy->setMatrices(lowMatrices);
-		mediumProxy->setLogicalInstanceTotal(0);
-		lowProxy->setLogicalInstanceTotal(0);
-		mediumProxy->setLogicalVisibleCount(
-			static_cast<unsigned int>(mediumMatrices.size())
+		component.mediumMesh->setLogicalInstanceTotal(0);
+		component.lowMesh->setLogicalInstanceTotal(0);
+		component.mediumMesh->setLogicalVisibleCount(
+			index == 0 ? logicalLodCounts[1] : 0u
 		);
-		lowProxy->setLogicalVisibleCount(static_cast<unsigned int>(lowMatrices.size()));
+		component.lowMesh->setLogicalVisibleCount(
+			index == 0 ? logicalLodCounts[2] : 0u
+		);
 	}
 }

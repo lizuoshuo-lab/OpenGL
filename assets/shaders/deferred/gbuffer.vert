@@ -7,11 +7,13 @@ layout (location = 3) in vec3 aTangent;
 layout (location = 4) in mat4 aInstanceMatrix;
 layout (location = 8) in ivec4 aBoneIds;
 layout (location = 9) in vec4 aBoneWeights;
+layout (location = 10) in float aLodFade;
 
 out vec2 uv;
 out vec3 worldPosition;
 out mat3 tbn;
 flat out vec3 instanceOrigin;
+flat out float lodFade;
 
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
@@ -51,6 +53,7 @@ void main()
 	uv = aUV;
 	worldPosition = position.xyz;
 	instanceOrigin = renderModel[3].xyz;
+	lodFade = instanced != 0 ? aLodFade : 1.0;
 	tbn = mat3(tangent, bitangent, normal);
 	gl_Position = projectionMatrix * viewMatrix * position;
 }

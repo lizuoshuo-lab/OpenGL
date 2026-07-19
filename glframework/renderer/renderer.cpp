@@ -287,6 +287,7 @@ void Renderer::renderShadowMap(
 
 			if (mesh->getType() == ObjectType::InstancedMesh) {
 				InstancedMesh* im = (InstancedMesh*)mesh;
+				im->bindInstanceAttributes();
 				glDrawElementsInstanced(GL_TRIANGLES, geometry->getIndicesCount(), GL_UNSIGNED_INT, 0, im->mInstanceCount);
 				recordDraw(geometry, im->mInstanceCount);
 			}
@@ -365,6 +366,7 @@ void Renderer::renderDepthObject(Object* object) {
 		glBindVertexArray(geometry->getVao());
 		if (object->getType() == ObjectType::InstancedMesh) {
 			InstancedMesh* instancedMesh = static_cast<InstancedMesh*>(mesh);
+			instancedMesh->bindInstanceAttributes();
 			glDrawElementsInstanced(
 				GL_TRIANGLES,
 				geometry->getIndicesCount(),
@@ -455,7 +457,8 @@ void Renderer::renderObject(
 										 break;
 		case MaterialType::CubeMaterial: {
 			CubeMaterial* cubeMat = (CubeMaterial*)material;
-			mesh->setPosition(camera->mPosition);
+			GLint viewport[4]{};
+			glGetIntegerv(GL_VIEWPORT, viewport);
 			//mvp
 			shader->setMatrix4x4("modelMatrix", mesh->getModelMatrix());
 			shader->setMatrix4x4("viewMatrix", camera->getViewMatrix());
@@ -465,6 +468,18 @@ void Renderer::renderObject(
 			shader->setFloat("environmentIntensity", cubeMat->mIntensity);
 			shader->setFloat("environmentBlackLevel", cubeMat->mBlackLevel);
 			shader->setFloat("starIntensity", cubeMat->mStarIntensity);
+			shader->setInt("fixedBackground", cubeMat->mFixedBackground ? 1 : 0);
+			shader->setFloat("timeSeconds", cubeMat->mTimeSeconds);
+			shader->setFloat(
+				"starTwinkleFraction",
+				cubeMat->mStarTwinkleEnabled ? cubeMat->mStarTwinkleFraction : 0.0f
+			);
+			shader->setFloat("starTwinkleStrength", cubeMat->mStarTwinkleStrength);
+			shader->setFloat("starTwinkleSpeed", cubeMat->mStarTwinkleSpeed);
+			shader->setFloat(
+				"viewportHeight",
+				static_cast<float>(std::max(viewport[3], 1))
+			);
 			cubeMat->mDiffuse->bind();
 		}
 										break;
@@ -574,6 +589,7 @@ void Renderer::renderObject(
 		//4 执行绘制命令
 		if (object->getType() == ObjectType::InstancedMesh) {
 			InstancedMesh* im = (InstancedMesh*)mesh;
+			im->bindInstanceAttributes();
 			glDrawElementsInstanced(GL_TRIANGLES, geometry->getIndicesCount(), GL_UNSIGNED_INT, 0, im->mInstanceCount);
 			recordDraw(geometry, im->mInstanceCount);
 		}

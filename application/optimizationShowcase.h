@@ -42,6 +42,10 @@ private:
 		PbrMaterial* material{ nullptr };
 		glm::mat4 localMatrix{ 1.0f };
 		InstancedMesh* instancedMesh{ nullptr };
+		Geometry* mediumGeometry{ nullptr };
+		Geometry* lowGeometry{ nullptr };
+		InstancedMesh* mediumMesh{ nullptr };
+		InstancedMesh* lowMesh{ nullptr };
 		std::size_t variantIndex{ 0 };
 	};
 
@@ -65,10 +69,6 @@ private:
 	);
 	void collectSourceComponents(Object* object, std::size_t variantIndex);
 	void calculateSourceBounds();
-	glm::mat4 createProxyMatrix(
-		const glm::mat4& placement,
-		Geometry* proxyGeometry
-	) const;
 
 	Object* mRoot{ nullptr };
 	Object* mReferenceRoot{ nullptr };
@@ -84,8 +84,4 @@ private:
 	std::size_t mVariantCount{ 1 };
 	glm::vec3 mSourceMinimum{ -0.5f };
 	glm::vec3 mSourceMaximum{ 0.5f };
-	Geometry* mMediumGeometry{ nullptr };
-	Geometry* mLowGeometry{ nullptr };
-	std::vector<InstancedMesh*> mMediumProxies;
-	std::vector<InstancedMesh*> mLowProxies;
 };

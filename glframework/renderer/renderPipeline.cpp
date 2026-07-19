@@ -748,6 +748,7 @@ void RenderPipeline::drawGBufferMesh(Mesh* mesh, Camera* camera) {
 	const std::uint64_t instances = meshInstanceCount(mesh);
 	glBindVertexArray(geometry->getVao());
 	if (mesh->getType() == ObjectType::InstancedMesh) {
+		static_cast<InstancedMesh*>(mesh)->bindInstanceAttributes();
 		glDrawElementsInstanced(
 			GL_TRIANGLES,
 			geometry->getIndicesCount(),

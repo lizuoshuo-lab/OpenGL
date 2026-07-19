@@ -8,6 +8,11 @@ uniform sampler2D sphericalSampler;
 uniform float environmentIntensity;
 uniform float environmentBlackLevel;
 uniform float starIntensity;
+uniform float timeSeconds;
+uniform float starTwinkleFraction;
+uniform float starTwinkleStrength;
+uniform float starTwinkleSpeed;
+uniform float viewportHeight;
 
 const float PI = 3.1415926535897932384626433832795;
 
@@ -26,22 +31,24 @@ float hash21(vec2 value)
 	return fract(value.x * value.y);
 }
 
-vec3 proceduralStars(vec2 uv)
+vec3 proceduralStars(vec2 pixelPosition)
 {
-	vec2 gridUv = uv * vec2(1150.0, 575.0);
-	vec2 cell = floor(gridUv);
-	vec2 local = fract(gridUv) - 0.5;
-	vec2 offset = vec2(
+	float pixelScale = clamp(viewportHeight / 900.0, 1.0, 2.4);
+	float cellSize = 9.0 * pixelScale;
+	vec2 gridPosition = pixelPosition / cellSize;
+	vec2 cell = floor(gridPosition);
+	vec2 offset = 0.14 + 0.72 * vec2(
 		hash21(cell + vec2(13.0, 7.0)),
 		hash21(cell + vec2(31.0, 19.0))
-	) - 0.5;
+	);
 	float seed = hash21(cell + vec2(71.0, 43.0));
-	float exists = step(0.9800, seed);
-	float distanceToStar = length(local - offset * 0.64);
+	float exists = step(0.972, seed);
+	vec2 starCenter = (cell + offset) * cellSize;
+	float distanceToStar = length(pixelPosition - starCenter);
 	float sizeSeed = hash21(cell + vec2(5.0, 89.0));
-	float radius = mix(0.035, 0.105, pow(sizeSeed, 3.0));
-	float edge = max(fwidth(distanceToStar) * 1.15, 0.012);
-	float point = 1.0 - smoothstep(radius, radius + edge, distanceToStar);
+	float radius = mix(0.58, 1.18, pow(sizeSeed, 2.4)) * pixelScale;
+	float edge = 0.65 * pixelScale;
+	float point = 1.0 - smoothstep(radius - edge, radius + edge, distanceToStar);
 	float brightness = 0.35 + 1.15 * pow(
 		hash21(cell + vec2(109.0, 3.0)),
 		3.0
@@ -53,7 +60,20 @@ vec3 proceduralStars(vec2 uv)
 	vec3 color = temperature < 0.22
 		? mix(warm, neutral, temperature / 0.22)
 		: mix(neutral, cool, (temperature - 0.22) / 0.78);
-	return color * point * exists * brightness;
+	float twinkleSeed = hash21(cell + vec2(191.0, 61.0));
+	float twinkleMask = step(1.0 - clamp(starTwinkleFraction, 0.0, 1.0), twinkleSeed);
+	float phase = hash21(cell + vec2(43.0, 211.0)) * 2.0 * PI;
+	float speedVariation = mix(
+		0.72,
+		1.28,
+		hash21(cell + vec2(157.0, 97.0))
+	);
+	float twinkleTime = timeSeconds * starTwinkleSpeed * speedVariation;
+	float twinkleWave =
+		sin(twinkleTime + phase) * 0.72 +
+		sin(twinkleTime * 0.43 + phase * 1.73) * 0.28;
+	float twinkle = 1.0 + twinkleMask * starTwinkleStrength * twinkleWave;
+	return color * point * exists * brightness * max(twinkle, 0.15);
 }
 
 void main()
@@ -63,6 +83,6 @@ void main()
 	vec3 environment = texture(sphericalSampler, uv).rgb;
 	environment = max(environment - vec3(environmentBlackLevel), vec3(0.0));
 	environment *= environmentIntensity;
-	environment += proceduralStars(uv) * starIntensity;
+	environment += proceduralStars(gl_FragCoord.xy) * starIntensity;
 	FragColor = vec4(environment, 1.0);
 }
