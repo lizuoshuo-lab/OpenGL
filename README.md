@@ -1,6 +1,8 @@
 # OpenGL Renderer
 
-![Animated geological planet and GPU asteroid belt with smooth LOD transitions](docs/assets/asteroid-lod-preview.gif)
+<p align="center">
+  <img src="docs/assets/asteroid-lod-preview.gif" width="100%" alt="Animated geological planet and GPU asteroid belt with smooth LOD transitions">
+</p>
 
 一个面向实时图形渲染岗位的 C++17 / OpenGL 4.6 展示项目。项目包含可拆分的 Shadow、GBuffer、Lighting、Transparent、PostProcess 与 UI Pass，支持 Deferred PBR、SSAO、Bloom、ACES、透明物体 Forward Pass、IBL、软阴影，以及视锥裁剪、实例化和三级 LOD。LOD 网格由原模型简化生成并保留原材质，相邻层级使用互补抖动平滑过渡。所有渲染开关、调试缓冲区和性能数据都集中在 ImGui 中。
 
@@ -18,9 +20,9 @@
 | --- |
 | ![Deferred SSAO-only contact occlusion showcase](docs/assets/showcase_ssao_only_4k.png) |
 
-| Deferred PBR 小行星带 | 棋子到棋盘的软阴影 |
-| --- | --- |
-| ![Multi-material asteroid instancing and LOD showcase](docs/assets/showcase_p0_asteroid_belt_4k.png) | ![A Beautiful Game soft-shadow showcase](docs/assets/showcase_chess_shadow.png) |
+| 棋子到棋盘的软阴影 |
+| --- |
+| ![A Beautiful Game soft-shadow showcase](docs/assets/showcase_chess_shadow.png) |
 
 | Flight Helmet：6 套材质 | 5 x 5 BRDF 材质矩阵 |
 | --- | --- |
