@@ -12,7 +12,7 @@ public:
 	bool mAnimate{ true };
 	float mTimeSeconds{ 0.0f };
 	float mIntensity{ 0.96f };
-	float mMotionSpeed{ 0.30f };
+	float mMotionSpeed{ 0.65f };
 	float mLowerHeight{ 6.0f };
 	float mUpperHeight{ 40.0f };
 	float mCurtainDistance{ 42.0f };
@@ -24,6 +24,7 @@ public:
 	float mTurbulence{ 0.95f };
 	float mBandVariation{ 0.95f };
 	float mRayDetail{ 0.08f };
+	float mDiffuseSkyIntensity{ 0.65f };
 	float mRedEmission{ 0.06f };
 	float mBlueEmission{ 0.08f };
 	int mRaymarchSteps{ 64 };

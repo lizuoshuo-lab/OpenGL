@@ -19,6 +19,7 @@ uniform float foldStrength;
 uniform float turbulence;
 uniform float bandVariation;
 uniform float rayDetail;
+uniform float diffuseSkyIntensity;
 uniform float redEmission;
 uniform float blueEmission;
 uniform int raymarchSteps;
@@ -98,17 +99,17 @@ float curtainCenter(
 	float orientation = (hash11(layer * 17.1 + 2.0) - 0.5) * 0.42;
 	float warpedX = position.x + macroWarp * foldStrength * 1.85 +
 		altitude * foldStrength * (0.72 + 0.38 * sin(position.x * 0.027 + phase));
-	float broadFold = sin(warpedX * foldScale + phase + motion * 0.08);
+	float broadFold = sin(warpedX * foldScale + phase + motion * 0.22);
 	float sweepingFold = sin(
-		warpedX * foldScale * 0.47 + altitude * 4.2 + phase * 1.41 - motion * 0.055
+		warpedX * foldScale * 0.47 + altitude * 4.2 + phase * 1.41 - motion * 0.14
 	);
 	float localCurl = sin(
-		warpedX * foldScale * 2.63 - altitude * 2.1 + phase * 0.68 + motion * 0.12
+		warpedX * foldScale * 2.63 - altitude * 2.1 + phase * 0.68 + motion * 0.31
 	);
 	float fold = broadFold * 0.62 + sweepingFold * 0.31 +
 		localCurl * turbulence * 0.14;
 	float heightSweep = altitude * foldStrength * 0.42 *
-		sin(position.x * 0.031 + phase * 1.8 - motion * 0.04);
+		sin(position.x * 0.031 + phase * 1.8 - motion * 0.11);
 	return -curtainDistance - layer * curtainSpread + orientation * position.x +
 		fold * foldStrength + heightSweep;
 }
@@ -121,12 +122,12 @@ vec2 curtainField(vec3 position, float motion)
 		1.0
 	);
 	vec2 flowCoordinate = vec2(
-		position.x * 0.026 + motion * 0.018,
-		position.y * 0.034 - motion * 0.012
+		position.x * 0.026 + motion * 0.050,
+		position.y * 0.034 - motion * 0.034
 	);
 	float flowA = fbm2(flowCoordinate);
 	float flowB = fbm2(
-		flowCoordinate * 0.61 + vec2(8.7, -4.1) - vec2(motion * 0.011, motion * 0.007)
+		flowCoordinate * 0.61 + vec2(8.7, -4.1) - vec2(motion * 0.032, motion * 0.021)
 	);
 	float macroWarp = (flowA - 0.5) * 2.0 +
 		0.42 * sin(flowB * 6.2831853 + normalizedHeight * 3.1);
@@ -157,25 +158,25 @@ vec2 curtainField(vec3 position, float motion)
 		);
 
 		float patchNoise = 0.5 + 0.5 * sin(
-			flowA * 5.7 + flowB * 3.2 + position.x * 0.022 + phase - motion * 0.06
+			flowA * 5.7 + flowB * 3.2 + position.x * 0.022 + phase - motion * 0.17
 		);
 		float bandSignal = marbleBand * 0.64 + patchNoise * 0.36;
 		float brokenBand = smoothstep(0.42, 0.72, bandSignal);
 		float broadPatch = mix(1.0, 0.06 + 0.94 * brokenBand, bandVariation);
 
 		float pathNoise = fbm2(vec2(
-			position.x * 0.017 + layer * 3.7 - motion * 0.009,
-			layer * 5.3 + position.z * 0.004 + motion * 0.003
+			position.x * 0.017 + layer * 3.7 - motion * 0.028,
+			layer * 5.3 + position.z * 0.004 + motion * 0.010
 		));
 		float pathDetail = fbm2(vec2(
-			position.x * 0.041 - layer * 2.1 + motion * 0.006,
+			position.x * 0.041 - layer * 2.1 + motion * 0.019,
 			layer * 8.7 + 2.4
 		));
 		float directionalSweep = sin(layer * 4.13 + 0.70) * 0.13 *
 			(position.x / max(curtainSpan, 1.0));
 		float ribbonCenter = 0.31 + layer * 0.18 + directionalSweep +
 			(pathNoise - 0.52) * 0.30 +
-			0.055 * sin(position.x * 0.029 + phase - motion * 0.015) +
+			0.055 * sin(position.x * 0.029 + phase - motion * 0.047) +
 			(pathDetail - 0.5) * 0.055;
 		ribbonCenter = clamp(ribbonCenter, 0.17, 0.88);
 		float ribbonWidth = mix(0.036, 0.064, flowB) *
@@ -190,7 +191,7 @@ vec2 curtainField(vec3 position, float motion)
 		));
 		float ribbonRidge = sharpLowerHalf * softUpperHalf;
 		float foldOffset = ribbonWidth * (
-			1.42 + 0.48 * sin(position.x * 0.072 + phase * 1.7 - motion * 0.025)
+			1.42 + 0.48 * sin(position.x * 0.072 + phase * 1.7 - motion * 0.078)
 		);
 		float foldedDistance = (heightOffset - foldOffset) /
 			max(ribbonWidth * 0.38, 0.01);
@@ -198,7 +199,7 @@ vec2 curtainField(vec3 position, float motion)
 
 		float rayCoordinate = position.x * (0.19 + layer * 0.018) +
 			normalizedHeight * (1.2 + 0.7 * sin(position.x * 0.021 + phase)) +
-			layer * 11.0 + motion * 0.10;
+			layer * 11.0 + motion * 0.28;
 		float rayNoise = smoothNoise1(rayCoordinate);
 		float rays = mix(0.34, 1.18, pow(rayNoise, 2.4));
 		float rayModulation = mix(1.0, rays, rayDetail);
@@ -220,6 +221,43 @@ vec3 heightEmission(float normalizedHeight)
 	float upperEdge = 1.0 - smoothstep(0.96, 1.0, normalizedHeight);
 	return (greenColor * greenLayer + redColor * redLayer + blueColor * blueLayer) *
 		lowerEdge * upperEdge;
+}
+
+float diffuseSkyField(vec3 rayDirection, float motion)
+{
+	float azimuth = atan(rayDirection.x, -rayDirection.z);
+	float elevation = asin(clamp(rayDirection.y, -1.0, 1.0));
+	vec2 skyCoordinate = vec2(azimuth * 1.15, elevation * 2.35);
+	float domainWarp = fbm2(vec2(
+		skyCoordinate.x * 0.58 + motion * 0.080,
+		skyCoordinate.y * 0.42 - motion * 0.045
+	));
+	vec2 veilCoordinate = vec2(
+		(skyCoordinate.x + (domainWarp - 0.5) * 0.82) * 1.85 + motion * 0.050,
+		skyCoordinate.y * 0.34 - motion * 0.025
+	);
+	float broadVeil = fbm2(veilCoordinate);
+	float verticalDrape = fbm2(vec2(
+		veilCoordinate.x * 2.45 - motion * 0.12 + 4.7,
+		veilCoordinate.y * 0.30 + domainWarp * 0.65
+	));
+	float foldedVein = 1.0 - smoothstep(
+		0.07,
+		0.30,
+		abs(broadVeil - verticalDrape)
+	);
+	float broadMask = smoothstep(0.44, 0.68, broadVeil);
+	float drapeMask = smoothstep(0.46, 0.68, verticalDrape);
+	float columnCoordinate = skyCoordinate.x * 3.8 +
+		(domainWarp - 0.5) * 2.2 +
+		sin(skyCoordinate.y * 1.2 - motion * 0.060) * 0.9 -
+		motion * 0.18;
+	float columnMask = smoothstep(0.40, 0.74, smoothNoise1(columnCoordinate));
+	float veil = broadMask * 0.30 + drapeMask * 0.24 +
+		columnMask * 0.38 + foldedVein * 0.08;
+	float horizonLift = exp(-max(elevation, 0.0) * 1.55);
+	return (0.16 + veil * 0.84) *
+		(0.64 + horizonLift * 0.36);
 }
 
 void main()
@@ -277,5 +315,9 @@ void main()
 	}
 
 	float horizonFade = smoothstep(0.012, 0.07, rayDirection.y);
-	FragColor = vec4(accumulated * intensity * horizonFade, 0.0);
+	float skyVisibility = smoothstep(0.006, 0.032, rayDirection.y);
+	float skyVeil = diffuseSkyField(rayDirection, motion);
+	vec3 skyTint = mix(vec3(0.008, 0.075, 0.085), greenColor * 0.15, 0.34);
+	vec3 diffuseSky = skyTint * skyVeil * diffuseSkyIntensity * skyVisibility;
+	FragColor = vec4(accumulated * intensity * horizonFade + diffuseSky, 0.0);
 }

@@ -1704,7 +1704,7 @@ void renderImGui() {
 				"Motion Speed",
 				&auroraMaterial->mMotionSpeed,
 				0.0f,
-				0.8f,
+				2.0f,
 				"%.2f"
 			);
 
@@ -1724,6 +1724,7 @@ void renderImGui() {
 			ImGui::SliderFloat("Turbulence", &auroraMaterial->mTurbulence, 0.0f, 1.5f, "%.2f");
 			ImGui::SliderFloat("Band Variation", &auroraMaterial->mBandVariation, 0.0f, 1.0f, "%.2f");
 			ImGui::SliderFloat("Ray Detail", &auroraMaterial->mRayDetail, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("Diffuse Sky", &auroraMaterial->mDiffuseSkyIntensity, 0.0f, 1.0f, "%.2f");
 
 			ImGui::SeparatorText("Emission Layers");
 			ImGui::SliderFloat("Red Oxygen", &auroraMaterial->mRedEmission, 0.0f, 1.5f, "%.2f");

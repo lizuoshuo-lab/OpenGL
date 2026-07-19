@@ -18,7 +18,7 @@ void AuroraMaterial::resetAppearance() {
 	mAnimate = true;
 	mTimeSeconds = 0.0f;
 	mIntensity = 0.96f;
-	mMotionSpeed = 0.30f;
+	mMotionSpeed = 0.65f;
 	mLowerHeight = 6.0f;
 	mUpperHeight = 40.0f;
 	mCurtainDistance = 42.0f;
@@ -30,6 +30,7 @@ void AuroraMaterial::resetAppearance() {
 	mTurbulence = 0.95f;
 	mBandVariation = 0.95f;
 	mRayDetail = 0.08f;
+	mDiffuseSkyIntensity = 0.65f;
 	mRedEmission = 0.06f;
 	mBlueEmission = 0.08f;
 	mRaymarchSteps = 64;

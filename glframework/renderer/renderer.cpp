@@ -509,6 +509,7 @@ void Renderer::renderObject(
 			shader->setFloat("turbulence", auroraMat->mTurbulence);
 			shader->setFloat("bandVariation", auroraMat->mBandVariation);
 			shader->setFloat("rayDetail", auroraMat->mRayDetail);
+			shader->setFloat("diffuseSkyIntensity", auroraMat->mDiffuseSkyIntensity);
 			shader->setFloat("redEmission", auroraMat->mRedEmission);
 			shader->setFloat("blueEmission", auroraMat->mBlueEmission);
 			shader->setInt("raymarchSteps", auroraMat->mRaymarchSteps);

@@ -1,6 +1,6 @@
 # 实时极光体积渲染
 
-本场景实现的是面向实时展示的物理启发近似，不是空间天气或粒子输运模拟。目标是在现有 OpenGL 延迟渲染管线中保留极光最重要的视觉结构：随机弯曲的带状薄帘、随高度变化的发射颜色、断续亮边、次级褶皱和缓慢流动。竖向射线仅作为可调的弱细节，不再承担主体轮廓。
+本场景实现的是面向实时展示的物理启发近似，不是空间天气或粒子输运模拟。目标是在现有 OpenGL 延迟渲染管线中保留极光最重要的视觉结构：随机弯曲的带状薄帘、覆盖整片星空的低频青绿色帘幕、随高度变化的发射颜色、断续亮边、次级褶皱和连续流动。竖向射线仅作为可调的弱细节，不再承担主体轮廓。
 
 ![4K volumetric aurora](assets/aurora_4k.png)
 
@@ -62,31 +62,45 @@ C = integral T(s) * L(ray(s)) ds
 T(s + ds) = T(s) * exp(-sigma * Phi(ray(s)) * ds)
 ```
 
-极光在物理上接近光学薄介质，因此外部合成使用加法混合；积分内部只加入很弱的透射衰减，用于避免多层帘幕叠加后完全失去结构。薄片在掠射角下会让大量低密度样本沿同一视线累积，产生整片天空染色。当前实现先对通量执行软阈值，再降低远层权重，只保留主体带和窄软边：
+极光在物理上接近光学薄介质，因此外部合成使用加法混合；积分内部只加入很弱的透射衰减，用于避免多层帘幕叠加后完全失去结构。薄片在掠射角下会让大量低密度样本沿同一视线累积，产生没有形态信息的宽 halo。当前实现先对通量执行软阈值，再降低远层权重，只保留主体带和窄软边：
 
 ```text
 Phi_isolated = Phi * smoothstep(0.018, 0.095, Phi)
 layerWeight_i = 1 - 0.22 * i
 ```
 
-### 4. 低分辨率体积缓冲
+### 4. 全天空低频漫射层
+
+实拍极光中，即使远离最亮的弧带，夜空也常带有微弱青绿散射，而不是回到纯黑。为了让这种综合色值可控，着色器不依赖被软阈值丢弃的低密度体积样本，而是用观察射线的球面方位角与仰角建立独立天空空间场。域扭曲 fBm 生成宽幅明暗区域，低频一维噪声形成纵向垂幕，再用高度方向扰动打破笔直边界：
+
+```text
+u_sky = (azimuth(ray), elevation(ray))
+V(u, t) = 0.16 + 0.84 * curtainMask(domainWarp(u, t))
+L_sky = C_teal * V(u, t) * I_diffuse
+```
+
+基础项保证每个可见天空像素都保留轻微色彩，变化项提供大尺度暗缝和局部更亮的帘幕。`t` 只连续平移和扭曲噪声坐标，不逐帧更换随机种子，因此相邻帧保持时间相干。该层仍使用全分辨率场景深度遮罩，不会覆盖山体。
+
+### 5. 低分辨率体积缓冲
 
 体积积分写入四分之一宽高的 `RGBA16F` 缓冲。在 4K 输出下，极光缓冲为 `960 x 540`。随后线性上采样，并使用全分辨率 GBuffer 深度生成天空遮罩，将结果以加法方式合成回 HDR 颜色，再进入 Bloom 与 ACES。
 
 ```mermaid
 flowchart LR
     RAY["Camera ray"] --> SLAB["Height slab intersection"]
+    RAY --> SKY["Sky-space diffuse drapes"]
     SLAB --> FIELD["Procedural curtain flux"]
     FIELD --> HEIGHT["Height emission profiles"]
     HEIGHT --> MARCH["Adaptive ray integration"]
     MARCH --> LOW["Quarter-resolution RGBA16F"]
+    SKY --> LOW
     DEPTH["Full-resolution depth"] --> MASK["Sky visibility mask"]
     LOW --> MASK
     MASK --> HDR["Additive HDR composite"]
     HDR --> BLOOM["Bloom + ACES"]
 ```
 
-这种处理将主要像素着色工作量降至全分辨率的约 `1/16`，同时由全分辨率深度维持山体轮廓。当前机器在 1600 x 900 控制面板截帧时显示约 `2.3 ms` 的显示帧时间；实际性能会随 GPU、分辨率和 Raymarch Steps 改变。
+这种处理将主要像素着色工作量降至全分辨率的约 `1/16`，同时由全分辨率深度维持山体轮廓。当前机器在 1600 x 900 控制面板截帧时显示约 `2.2 ms` 的显示帧时间；实际性能会随 GPU、分辨率和 Raymarch Steps 改变。
 
 ## ImGui 参数
 
@@ -98,6 +112,7 @@ flowchart LR
 - `Sheet Thickness / Fold Scale / Fold Strength / Turbulence`：薄帘形态。
 - `Band Variation`：断续遮罩、路径宽度和随机带形的混合强度。
 - `Ray Detail`：局部细射线权重，默认保持较低以突出带状主体。
+- `Diffuse Sky`：整片星空的青绿色低频漫射强度，不改变主体亮带密度。
 - `Red Oxygen / Blue Nitrogen`：高层红光和低层蓝紫边缘的相对权重。
 - `Green / Red / Blue Emission`：显示空间中的发射颜色。
 
