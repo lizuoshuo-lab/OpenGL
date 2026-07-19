@@ -10,7 +10,7 @@
 - 渲染路径：Deferred GBuffer、Forward PBR、Soft Shadow
 - 控制：动画切换、播放暂停、循环、0.1x-2.5x 倍速、时间轴拖动、重置
 
-![Fox GPU skeletal animation](assets/showcase_skeletal_animation_4k.png)
+[![Fox GPU skeletal animation](assets/skeletal-animation-preview.gif)](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4)
 
 [播放 24 秒 1080p 实机演示：Survey / Walk / Run](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4)
 

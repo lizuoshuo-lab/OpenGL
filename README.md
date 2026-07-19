@@ -12,7 +12,7 @@
 
 | GPU 骨骼动画：Walk / Survey / Run 与动态软阴影 |
 | --- |
-| [![Fox GPU skeletal animation and skinned soft-shadow showcase](docs/assets/showcase_skeletal_animation_4k.png)](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4) |
+| [![Fox GPU skeletal animation and skinned soft-shadow showcase](docs/assets/skeletal-animation-preview.gif)](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4) |
 
 | Deferred SSAO-only：64 样本与边缘感知上采样 |
 | --- |
