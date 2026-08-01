@@ -1,8 +1,8 @@
 # OpenGL Renderer
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/aurora-preview-1080p.mp4">
-    <img src="docs/assets/aurora-preview.gif" width="100%" alt="Animated volumetric aurora with full-sky diffuse curtains">
+  <a href="https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4">
+    <img src="docs/assets/asteroid-lod-preview.gif" width="100%" alt="Animated geological planet and GPU asteroid belt with smooth LOD transitions">
   </a>
 </p>
 
