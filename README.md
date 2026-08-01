@@ -2,13 +2,13 @@
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4">
-    <img src="docs/assets/asteroid-lod-preview.gif" width="100%" alt="Animated geological planet and GPU asteroid belt with smooth LOD transitions">
+    <img src="https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/planet-showcase-preview.gif" width="100%" alt="Animated geological planet and GPU asteroid belt with smooth LOD transitions">
   </a>
 </p>
 
 一个面向实时图形渲染岗位的 C++17 / OpenGL 4.6 展示项目。项目包含可拆分的 Shadow、GBuffer、Lighting、Transparent、PostProcess 与 UI Pass，支持 Deferred PBR、SSAO、Bloom、ACES、透明物体 Forward Pass、IBL、软阴影、GPU 骨骼动画和程序化体积极光，以及视锥裁剪、实例化和三级 LOD。LOD 网格由原模型简化生成并保留原材质，相邻层级使用互补抖动平滑过渡。所有渲染开关、调试缓冲区和性能数据都集中在 ImGui 中。
 
-[GitHub 仓库](https://github.com/lizuoshuo-lab/OpenGL) · [播放 30 秒渲染演示（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4) · [播放 24 秒骨骼动画（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4) · [播放 12 秒极光（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/aurora-preview-1080p.mp4)
+[GitHub 仓库](https://github.com/lizuoshuo-lab/OpenGL) · [单独打开行星动图](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/planet-showcase-preview.gif) · [播放 30 秒渲染演示（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/opengl-ibl-preview-1080p.mp4) · [播放 24 秒骨骼动画（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/skeletal-animation-preview-1080p.mp4) · [播放 12 秒极光（1080p）](https://raw.githubusercontent.com/lizuoshuo-lab/OpenGL/main/docs/assets/aurora-preview-1080p.mp4)
 
 4K 原片：[渲染演示（下载）](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/opengl-ibl-showcase-30s.mp4) · [骨骼动画（下载）](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/skeletal-animation-showcase-24s.mp4) · [极光（下载）](https://github.com/lizuoshuo-lab/OpenGL/raw/refs/heads/main/docs/assets/aurora-showcase-12s.mp4)
 
